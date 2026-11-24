@@ -20,7 +20,7 @@ Because the installer is unsigned, the checksum is how you confirm the file is t
 2. In PowerShell, in the download folder:
 
    ```powershell
-   Get-FileHash .\Glowline-Setup-0.4.0.exe -Algorithm SHA256
+   Get-FileHash .\Glowline-Setup-0.4.1.exe -Algorithm SHA256
    ```
 
 3. Compare the `Hash` value with the **SHA-256** line in that release's notes (case doesn't matter). If they differ, don't run the file.
