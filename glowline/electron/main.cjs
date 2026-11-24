@@ -349,13 +349,17 @@ async function runSelfTest() {
       await within(control.webContents.executeJavaScript('document.exitFullscreen()')).catch(() => {});
       await new Promise((r) => setTimeout(r, 600));
     }
-    // Real desktop capture (content protection is off in self-test) to show the overlay on screen.
-    const d = screen.getPrimaryDisplay();
-    await save('selftest-desktop.png', async () => {
-      const [src] = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: d.size.width, height: d.size.height } });
-      if (!src) throw new Error('no screen source');
-      return src.thumbnail;
-    });
+    // Capture only the overlay window's own content (never the whole desktop, which can show
+    // whatever private windows the user has open).
+    const ov = overlays.values().next().value;
+    if (ov && !ov.isDestroyed()) await save('selftest-overlay.png', () => ov.webContents.capturePage());
+  }
+  const ov = overlays.values().next().value;
+  if (ov && !ov.isDestroyed()) {
+    const overlayState = await ov.webContents.executeJavaScript(
+      "({ framesReceived: window.__glowlineFrames ?? 0, gpu: document.documentElement.classList.contains('gl-on') })",
+    ).catch((e) => ({ error: e.message }));
+    process.stdout.write(`SELFTEST-OVERLAY ${JSON.stringify(overlayState)}\n`);
   }
   app.exit(report.ok ? 0 : 1);
 }

@@ -58,7 +58,7 @@ npm test
 npm run selftest
 ```
 
-`npm test` runs the unit tests: settings, color math, audio level, beat detection, auto-gain, Spotify title parsing, server, and markup and permission checks. `npm run selftest` launches the real app, starts Windows loopback capture, listens for 6 seconds, turns on the overlay, prints a `SELFTEST {...}` JSON report and exits. Play something while it runs. `peakRms` above 0 and `audibleFraction` above 0 mean system audio is reaching Glowline. Add `--selftest-out=<folder>` (`npx electron . --selftest --selftest-out=C:\temp\gl`) to also save screenshots, including a real desktop capture showing the overlay.
+`npm test` runs the unit tests: settings, color math, audio level, beat detection, auto-gain, Spotify title parsing, server, and markup and permission checks. `npm run selftest` launches the real app, starts Windows loopback capture, listens for 6 seconds, turns on the overlay, prints a `SELFTEST {...}` JSON report and exits. Play something while it runs. `peakRms` above 0 and `audibleFraction` above 0 mean system audio is reaching Glowline. Add `--selftest-out=<folder>` (`npx electron . --selftest --selftest-out=C:\temp\gl`) to also save screenshots of Glowline's own windows (never your desktop). The report also prints `SELFTEST-OVERLAY` (frames the overlay received) and, with `--selftest-fullscreen`, `SELFTEST-LYRICS`; `--selftest-autostart` checks the "Start listening when Glowline opens" path.
 
 ### Browser-only mode (optional)
 

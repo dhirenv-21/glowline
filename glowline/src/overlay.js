@@ -10,7 +10,9 @@ let signal = { level: 0, beat: 0 };
 let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', (e) => { reducedMotion = e.matches; });
 
+window.__glowlineFrames = 0; // read by the self-test to confirm frames arrive
 window.glowlineDesktop?.onFrame((frame) => {
+  window.__glowlineFrames++;
   if (frame.settings) settings = frame.settings;
   if (typeof frame.level === 'number') signal = { level: frame.level, beat: frame.beat ?? 0 };
 });
