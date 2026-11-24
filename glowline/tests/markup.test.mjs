@@ -23,7 +23,7 @@ test('every setting key has a matching control, and every enum value a radio or 
     if (key === 'theme') { assert.match(html, /id="theme-toggle"/); continue; }
     assert.match(html, new RegExp(`name="${key}"`), key);
   }
-  for (const key of ['colorMode', 'motion']) {
+  for (const key of ['colorMode', 'motion', 'lyricsMode']) {
     const start = html.search(new RegExp(`<select[^>]*name="${key}"`));
     const select = start < 0 ? '' : html.slice(start, html.indexOf('</select>', start));
     for (const v of ENUMS[key]) assert.match(select, new RegExp(`<option value="${v}"`), `${key}=${v}`);
@@ -53,4 +53,13 @@ test('the microphone is never requested', async () => {
   assert.ok(main.includes('if (!isControlContents(wc)) return callback(false);'));
   assert.ok(main.includes("if (permission === 'display-capture') return callback(!!pendingCapture && pendingCapture.expires > Date.now());"));
   assert.ok(main.includes("callback(permission === 'fullscreen');"));
+});
+
+test('lyrics privacy: settings and the consent card say exactly what is sent', () => {
+  const help = html.slice(html.indexOf('id="lyrics-help"'), html.indexOf('</label>', html.indexOf('id="lyrics-help"')));
+  for (const word of ['title', 'artist', 'album', 'length', 'lrclib.net']) assert.match(help, new RegExp(word));
+  assert.match(html, /<option value="ask">Ask each time<\/option>/);
+  const card = html.slice(html.indexOf('id="lyrics-consent"'), html.indexOf('id="lyrics-never"'));
+  for (const word of ['title, artist, album and length', 'lrclib.net', 'Nothing else is sent']) assert.ok(card.includes(word), word);
+  for (const id of ['lyrics-once', 'lyrics-always', 'lyrics-never']) assert.match(html, new RegExp(`id="${id}"`));
 });

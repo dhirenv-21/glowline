@@ -2,7 +2,7 @@ import {
   DEFAULTS, PRESETS, sanitizeSettings, loadSettings, saveSettings, findPreset,
   sampleEdgeColors, computeLevel, computeRms, smoothLevel, frameState, gradientCss, nextTheme,
   describeMediaError, createBeatDetector, computeBassLevel, createActivityTracker, createAutoGain, extractPalette,
-  activeLineIndex,
+  activeLineIndex, lyricsRequestPolicy,
 } from './core.js';
 import { createGlowRenderer } from './glow.js';
 import { demoCoverArt, demoSignal, DEMO_TRACK, DEMO_LYRICS } from './demo.js';
@@ -114,7 +114,7 @@ form.addEventListener('input', (e) => {
   const manualColor = t.name === 'primary' || t.name === 'secondary';
   update({ [t.name]: value, ...(manualColor ? { albumColors: false } : {}) });
   if (t.name === 'albumColors' && value) applyAlbumPalette();
-  if (t.name === 'lyrics') loadLyrics({ force: true });
+  if (t.name === 'lyricsMode') loadLyrics({ force: true });
 });
 form.addEventListener('submit', (e) => e.preventDefault());
 
@@ -452,6 +452,9 @@ const lyricsBox = $('#lyrics');
 const lyricsTrack = $('#lyrics-track');
 const lyricsNote = $('#lyrics-note');
 const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1, y: 0, target: 0, breath: -1 };
+const lyricsConsent = $('#lyrics-consent');
+/** Songs the user said "Look up this song" for, this session only (mode 'ask'). */
+const lyricsApproved = new Set();
 
 function lyricsKey() { return media.session && media.title ? `${media.artist}|${media.title}` : null; }
 
@@ -490,6 +493,7 @@ function showLyrics(res) {
   } else {
     lyr.els = [];
   }
+  lyricsConsent.hidden = res.status !== 'needs-consent';
   lyricsNote.textContent = {
     loading: 'Finding lyrics…',
     none: 'No lyrics found for this song.',
@@ -501,19 +505,41 @@ function showLyrics(res) {
 }
 
 async function loadLyrics({ force = false } = {}) {
-  stage.classList.toggle('lyrics-off', !settings.lyrics || !desktop);
-  if (!desktop?.getLyrics || !settings.lyrics) { lyr.key = null; showLyrics({ status: settings.lyrics ? 'idle' : 'off' }); return; }
+  const off = settings.lyricsMode === 'off';
+  stage.classList.toggle('lyrics-off', off || !desktop);
+  if (!desktop?.getLyrics || off) { lyr.key = null; showLyrics({ status: off ? 'off' : 'idle' }); return; }
   const key = lyricsKey();
   if (!key) { lyr.key = null; showLyrics({ status: 'idle' }); return; }
   if (key === lyr.key && !force) return;
   lyr.key = key;
+  // 'ask' mode: only the local cache is used until the user approves this song.
+  const policy = lyricsRequestPolicy(settings.lyricsMode, lyricsApproved.has(key));
   showLyrics({ status: 'loading' });
   const res = demoMode
     ? { status: 'synced', lines: DEMO_LYRICS }
-    : await desktop.getLyrics({ title: media.title, artist: media.artist, album: media.album, duration: media.duration });
+    : await desktop.getLyrics({
+      title: media.title, artist: media.artist, album: media.album, duration: media.duration,
+      allowNetwork: policy === 'network',
+    });
   if (lyr.key !== key) return; // the track changed while we were waiting
   showLyrics(res ?? { status: 'error' });
 }
+
+$('#lyrics-once').addEventListener('click', () => {
+  const key = lyricsKey();
+  if (key) lyricsApproved.add(key);
+  loadLyrics({ force: true });
+});
+$('#lyrics-always').addEventListener('click', () => {
+  update({ lyricsMode: 'auto' });
+  setStatus('Lyrics will be looked up automatically. Change this in Settings, More, Lyrics lookup.');
+  loadLyrics({ force: true });
+});
+$('#lyrics-never').addEventListener('click', () => {
+  update({ lyricsMode: 'off' });
+  setStatus('Lyrics are off. Nothing is sent to lrclib.net. Turn them back on in Settings, More.');
+  loadLyrics({ force: true });
+});
 
 let lastLyricsTime = performance.now();
 function renderLyrics(now) {

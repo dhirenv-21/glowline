@@ -405,3 +405,15 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; bo
   .lyric-line, .lyric-line::before { transition: none; }
   .stage:fullscreen .backdrop img, .stage:fullscreen .backdrop .drift-2 { animation: none; }
 }
+
+/* Lyrics lookup consent (mode "Ask each time") */
+.lyrics-consent {
+  position: absolute; top: 30%; left: 0; right: 4%; max-width: 620px; padding: 22px 24px; border-radius: 18px;
+  background: rgba(14,14,18,.82); border: 1px solid rgba(255,255,255,.12); color: #fff;
+}
+.lyrics-consent[hidden] { display: none; }
+.lyrics-consent-title { margin: 0 0 6px; font-size: clamp(20px, 2vw, 28px); font-weight: 750; }
+.lyrics-consent-text { margin: 0 0 16px; color: rgba(255,255,255,.72); font-size: 15px; line-height: 1.5; }
+.lyrics-consent-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.lyrics-consent .pill-btn { background: rgba(255,255,255,.08); color: #fff; border-color: rgba(255,255,255,.18); }
+.lyrics-consent .primary-pill { background: #fff; color: #000; border-color: transparent; }

@@ -80,16 +80,21 @@ function isControlContents(wc) {
   return !!control && !control.isDestroyed() && wc === control.webContents;
 }
 
-/** True only for the control window's top-level frame showing Glowline's own index.html. */
-function isTrustedSender(event) {
+/** '' when the sender is the control window's top-level frame showing Glowline's own index.html; otherwise why not. */
+function untrustedReason(event) {
   const frame = event?.senderFrame;
-  if (!frame || frame.parent) return false;            // main frame only, never an iframe
-  if (!isControlContents(event.sender)) return false;  // overlays and anything else: no IPC
-  return guard.isAppPageUrl(frame.url, ROOT, ['index.html']);
+  if (!frame) return 'no sender frame';
+  if (frame.parent) return 'sub-frame';                       // main frame only, never an iframe
+  if (!control || control.isDestroyed()) return 'control window closed';
+  if (!isControlContents(event.sender)) return `not the control window (webContents ${event.sender?.id} vs ${control.webContents.id})`;
+  if (!guard.isAppPageUrl(frame.url, ROOT, ['index.html'])) return `unexpected page ${String(frame.url).slice(0, 80)}`;
+  return '';
 }
+function isTrustedSender(event) { return untrustedReason(event) === ''; }
 
 let lastRejectLog = 0;
 function logRejected(channel, why) {
+  if (why === 'control window closed') return; // normal during shutdown: a last frame in flight
   const now = Date.now();
   if (now - lastRejectLog < 2000) return; // don't let a misbehaving page flood the log
   lastRejectLog = now;
@@ -99,7 +104,8 @@ function logRejected(channel, why) {
 /** ipcMain.handle with a sender check. Untrusted callers get an error, nothing runs. */
 function handle(channel, fn) {
   ipcMain.handle(channel, (event, ...args) => {
-    if (!isTrustedSender(event)) { logRejected(channel, 'untrusted sender'); throw new Error('Request rejected.'); }
+    const why = untrustedReason(event);
+    if (why) { logRejected(channel, why); throw new Error('Request rejected.'); }
     return fn(event, ...args);
   });
 }
@@ -107,7 +113,8 @@ function handle(channel, fn) {
 /** ipcMain.on with a sender check. Untrusted messages are dropped. */
 function listen(channel, fn) {
   ipcMain.on(channel, (event, ...args) => {
-    if (!isTrustedSender(event)) { logRejected(channel, 'untrusted sender'); return; }
+    const why = untrustedReason(event);
+    if (why) { logRejected(channel, why); return; }
     fn(event, ...args);
   });
 }
@@ -319,7 +326,7 @@ async function runSelfTest() {
       await new Promise((r) => setTimeout(r, 3500)); // let lyrics load and scroll into place
       await save('selftest-fullscreen.png', () => control.webContents.capturePage());
       const lyricsState = await within(control.webContents.executeJavaScript(
-        "({ note: document.getElementById('lyrics-note').textContent, lines: document.querySelectorAll('.lyric-line').length, active: document.querySelector('.lyric-line.active')?.textContent ?? null })",
+        "({ note: document.getElementById('lyrics-note').textContent, consent: !document.getElementById('lyrics-consent').hidden, lines: document.querySelectorAll('.lyric-line').length, active: document.querySelector('.lyric-line.active')?.textContent ?? null })",
       )).catch((e) => ({ error: e.message }));
       process.stdout.write(`SELFTEST-LYRICS ${JSON.stringify(lyricsState)}\n`);
       await within(control.webContents.executeJavaScript('document.exitFullscreen()')).catch(() => {});
