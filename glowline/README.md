@@ -24,7 +24,9 @@ npm install
 npm run dist
 ```
 
-This produces `dist\Glowline Setup 0.2.0.exe`. Run it, choose an install folder, and start **Glowline** from the Start menu. The installer is **unsigned**, so Windows SmartScreen will say "Windows protected your PC". Click **More info → Run anyway**. You can uninstall from *Settings → Apps*.
+This produces `dist\Glowline-Setup-<version>.exe`. Run it, choose an install folder, and start **Glowline** from the Start menu. The installer is **unsigned**, so Windows SmartScreen will say "Windows protected your PC". Click **More info → Run anyway**. You can uninstall from *Settings → Apps*.
+
+Prebuilt installers are on the [Releases page](https://github.com/dhirenv-21/glowline/releases).
 
 `npm run dist:dir` builds an unpacked app in `dist\win-unpacked\Glowline.exe` without an installer.
 
@@ -37,6 +39,14 @@ npm start
 ```
 
 The `package.json` in the parent `music clone` folder forwards `npm start`, `npm test`, `npm run selftest`, `npm run dist` and `npm run setup` (install dependencies) to this folder, so those commands also work from there.
+
+### Demo mode
+
+```bash
+npm run demo
+```
+
+Runs Glowline with a made-up track (generated cover art, original placeholder lyrics, a simulated 120 BPM beat), with no Spotify needed. `npm run screenshots` uses it to regenerate the images in `docs/screenshots/`. The app icon is drawn by `python build/make-icon.py` (Pillow).
 
 ### Tests
 
@@ -133,7 +143,6 @@ Settings live in Glowline's own local storage under `%APPDATA%\glowline`. **More
 - **macOS and Linux:** the overlay works, but system-audio loopback isn't wired up there (macOS would need ScreenCaptureKit audio with permission, Linux a PulseAudio/PipeWire monitor source). Use the local audio file fallback.
 - **Unsigned build:** SmartScreen warns on first run. Signing needs a paid code-signing certificate, which this project deliberately avoids.
 - **Lyrics depend on LRCLIB's catalog** and its timing. Very new or niche songs may have none, or slightly off timing. Glowline highlights each line a quarter-second early to feel in sync.
-- **No custom app icon yet:** the build uses Electron's default icon.
 
 ## Troubleshooting
 

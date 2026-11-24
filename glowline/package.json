@@ -4,7 +4,7 @@
   "version": "0.4.0",
   "private": true,
   "description": "Free, local ambient edge lighting for your desktop that reacts to Spotify and other system audio.",
-  "author": "Glowline (personal project)",
+  "author": "Dhiren Vasudeva",
   "type": "module",
   "main": "electron/main.cjs",
   "license": "MIT",
@@ -18,7 +18,9 @@
     "test": "node --test tests/core.test.mjs tests/server.test.mjs tests/markup.test.mjs tests/spotify.test.mjs tests/media.test.mjs tests/lyrics.test.mjs",
     "dist": "electron-builder --win nsis",
     "dist:dir": "electron-builder --win --dir",
-    "build:media": "powershell -NoProfile -ExecutionPolicy Bypass -File electron/build-media-thumb.ps1"
+    "build:media": "powershell -NoProfile -ExecutionPolicy Bypass -File electron/build-media-thumb.ps1",
+    "demo": "electron . --demo",
+    "screenshots": "electron . --screenshots=../docs/screenshots"
   },
   "build": {
     "appId": "local.glowline.app",
@@ -33,23 +35,34 @@
       "overlay.css",
       "src/**",
       "electron/**",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "shortcutName": "Glowline"
     },
     "asarUnpack": [
       "electron/media-helper.ps1",
       "electron/GlowlineMediaThumb.dll"
-    ]
+    ],
+    "artifactName": "Glowline-Setup-${version}.${ext}"
   },
   "devDependencies": {
     "electron": "45.4.1",
     "electron-builder": "26.0.12"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhirenv-21/glowline.git"
+  },
+  "homepage": "https://github.com/dhirenv-21/glowline"
 }

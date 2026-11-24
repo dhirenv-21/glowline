@@ -5,6 +5,8 @@ import {
   activeLineIndex,
 } from './core.js';
 import { createGlowRenderer } from './glow.js';
+import { demoCoverArt, demoSignal, DEMO_TRACK, DEMO_LYRICS } from './demo.js';
+let demoMode = false;
 import { createWheel } from './wheel.js';
 
 const desktop = window.glowlineDesktop ?? null;
@@ -285,6 +287,7 @@ async function initDesktop() {
   }
   renderSpotify(await desktop.getSpotifyStatus());
   desktop.onSpotifyStatus(renderSpotify);
+  if (info.demo) { startDemo(); if (settings.overlay) applyOverlay(); return; }
   desktop.onMedia(onMedia);
   const m = await desktop.getMedia();
   if (m && m.session) onMedia({ ...m, trackChanged: true });
@@ -504,7 +507,9 @@ async function loadLyrics({ force = false } = {}) {
   if (key === lyr.key && !force) return;
   lyr.key = key;
   showLyrics({ status: 'loading' });
-  const res = await desktop.getLyrics({ title: media.title, artist: media.artist, album: media.album, duration: media.duration });
+  const res = demoMode
+    ? { status: 'synced', lines: DEMO_LYRICS }
+    : await desktop.getLyrics({ title: media.title, artist: media.artist, album: media.album, duration: media.duration });
   if (lyr.key !== key) return; // the track changed while we were waiting
   showLyrics(res ?? { status: 'error' });
 }
@@ -847,9 +852,27 @@ function renderDetection() {
 // ---------- Analysis loop (timer-based so it keeps running while minimized) ----------
 const meterFill = $('#meter-fill');
 let tickCount = 0;
+function startDemo() {
+  demoMode = true;
+  audio.kind = 'system';
+  $('#dock-listen').setAttribute('aria-pressed', 'true');
+  $('#system-audio-start').hidden = true;
+  $('#system-audio-stop').hidden = false;
+  update({ motion: 'music', albumColors: true }, { persist: false });
+  renderSpotify({ state: 'playing', title: `${DEMO_TRACK.artist} - ${DEMO_TRACK.title}` });
+  onMedia({
+    type: 'media', session: true, app: 'demo', status: 'playing',
+    title: DEMO_TRACK.title, artist: DEMO_TRACK.artist, album: DEMO_TRACK.album,
+    position: DEMO_TRACK.start, duration: DEMO_TRACK.duration,
+    canNext: true, canPrevious: true, trackChanged: true, art: demoCoverArt(),
+  });
+}
+
 function analyse() {
   const now = performance.now();
-  if (audio.kind && audio.analyser) {
+  if (demoMode) {
+    Object.assign(signal, demoSignal(now), { audible: true });
+  } else if (audio.kind && audio.analyser) {
     audio.analyser.getByteFrequencyData(audio.freq);
     audio.analyser.getByteTimeDomainData(audio.time);
     signal.rms = computeRms(audio.time);

@@ -1,0 +1,35 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Glowline
+        2. Press the waveform button
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Glowline version
+      placeholder: "0.4.0"
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: textarea
+    id: selftest
+    attributes:
+      label: Self-test output (optional)
+      description: Output of `npm run selftest` for audio, cover-art or performance issues. Remove anything personal.
+      render: text

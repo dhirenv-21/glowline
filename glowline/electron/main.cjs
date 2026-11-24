@@ -13,6 +13,8 @@ const PRELOAD = path.join(__dirname, 'preload.cjs');
 const SELFTEST = process.argv.find((a) => a.startsWith('--selftest'));
 const SELFTEST_OUT = (process.argv.find((a) => a.startsWith('--selftest-out=')) || '').split('=')[1] || '';
 const OVERLAY_SHORTCUT = 'Control+Alt+G';
+const SHOTS_DIR = (process.argv.find((a) => a.startsWith('--screenshots=')) || '').split('=').slice(1).join('=');
+const DEMO = process.argv.includes('--demo') || !!SHOTS_DIR;
 
 let control = null;
 /** @type {Map<number, BrowserWindow>} */
@@ -25,7 +27,7 @@ let lastMedia = { type: 'media', session: false };
 let lastArt = null;
 
 // Self-test runs use their own profile so they never touch (or collide with) your real settings.
-if (SELFTEST) app.setPath('userData', path.join(app.getPath('temp'), 'glowline-selftest'));
+if (SELFTEST || DEMO) app.setPath('userData', path.join(app.getPath('temp'), DEMO ? 'glowline-demo' : 'glowline-selftest'));
 else if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => {
   if (control) { if (control.isMinimized()) control.restore(); control.focus(); }
@@ -46,6 +48,7 @@ function createControlWindow() {
     minWidth: 420,
     minHeight: 560,
     title: 'Glowline',
+    icon: path.join(ROOT, 'build', 'icon.png'),
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     // Dark, frameless title bar with native Windows buttons drawn over the page.
@@ -187,6 +190,7 @@ function installIpc() {
     systemAudioLoopback: process.platform === 'win32',
     overlaySupported: true,
     shortcut: OVERLAY_SHORTCUT.replace('Control', 'Ctrl'),
+    demo: DEMO,
   }));
   ipcMain.handle('displays:list', () => describeDisplays());
   ipcMain.handle('capture:prepare', (_e, { kind, displayId }) => {
@@ -258,12 +262,42 @@ async function runSelfTest() {
   app.exit(report.ok ? 0 : 1);
 }
 
+// ---------- Marketing screenshots (`electron . --screenshots=<dir>`, uses demo mode) ----------
+async function captureScreenshots() {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const js = (code, gesture = false) => control.webContents.executeJavaScript(code, gesture).catch(() => null);
+  const shot = async (name) => {
+    const img = await control.webContents.capturePage();
+    fs.writeFileSync(path.join(SHOTS_DIR, name), img.toPNG());
+    process.stdout.write(`SCREENSHOT ${name} ${img.getSize().width}x${img.getSize().height}
+`);
+  };
+  fs.mkdirSync(SHOTS_DIR, { recursive: true });
+  control.setContentSize(1440, 900);
+  control.center();
+  await wait(3500);
+  await shot('player.png');
+  await js("document.getElementById('dock-settings').click(); document.activeElement.blur()");
+  await wait(700);
+  await shot('settings.png');
+  await js("document.getElementById('sheet-close').click(); document.getElementById('dock-colors').click(); document.activeElement.blur()");
+  await wait(700);
+  await shot('colors.png');
+  await js("document.getElementById('sheet-close').click()");
+  await js("document.getElementById('stage').requestFullscreen()", true);
+  await wait(3500);
+  await shot('lyrics.png');
+  await js('document.exitFullscreen()');
+  await wait(500);
+  app.exit(0);
+}
+
 app.whenReady().then(() => {
   installCaptureHandlers();
   installIpc();
   createControlWindow();
 
-  stopSpotify = watchSpotify((status) => {
+  if (!DEMO) stopSpotify = watchSpotify((status) => {
     spotifyStatus = status;
     control?.webContents.send('spotify:status', status);
   });
@@ -272,7 +306,7 @@ app.whenReady().then(() => {
   screen.on('display-removed', () => { refitOverlays(); control?.webContents.send('displays:changed', describeDisplays()); });
   screen.on('display-metrics-changed', () => { refitOverlays(); control?.webContents.send('displays:changed', describeDisplays()); });
 
-  media = startMediaWatcher((msg) => {
+  if (!DEMO) media = startMediaWatcher((msg) => {
     if (msg.type === 'media') {
       if (msg.session && msg.trackChanged) lastArt = msg.art ?? null;
       if (!msg.session) lastArt = null;
@@ -285,7 +319,8 @@ app.whenReady().then(() => {
     console.warn(`[glowline] ${OVERLAY_SHORTCUT} is in use by another app; use the on-screen toggle instead.`);
   }
 
-  if (SELFTEST) control.webContents.once('did-finish-load', () => setTimeout(runSelfTest, 500));
+  if (SHOTS_DIR) control.webContents.once('did-finish-load', () => setTimeout(captureScreenshots, 300));
+  else if (SELFTEST) control.webContents.once('did-finish-load', () => setTimeout(runSelfTest, 500));
   else control.webContents.once('did-finish-load', () => {
     control.webContents.executeJavaScript('window.__glowlineAutoStart?.()', true).catch(() => {});
   });
