@@ -44,8 +44,11 @@ and shows the song's cover art and time-synced lyrics in a full-screen view.
 ## Install
 
 1. Download **`Glowline-Setup-x.y.z.exe`** from the [latest release](https://github.com/dhirenv-21/glowline/releases/latest).
-2. Run it. The installer isn't code-signed, so Windows SmartScreen may say *"Windows protected your PC"*: click **More info → Run anyway**.
-3. Open **Glowline** from the Start menu, play something in Spotify, and press the **waveform** button. Press the **bulb** to light up your screen.
+2. *(Recommended)* Check the download: `Get-FileHash .\Glowline-Setup-x.y.z.exe -Algorithm SHA256` in PowerShell should match the **SHA-256** in the release notes.
+3. Run it. The installer isn't code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*: click **More info → Run anyway**.
+4. Open **Glowline** from the Start menu, play something in Spotify, and press the **waveform** button. Press the **bulb** to light up your screen.
+
+**Updating:** there's no auto-update yet. Download the newer installer and run it over the old one; your settings are kept. See [docs/RELEASES.md](docs/RELEASES.md) for verification, updating, and the plan for code signing and automatic updates.
 
 **Requirements:** Windows 10 (2004+) or Windows 11, 64-bit, and the Spotify desktop app (any other player works for the light; cover art and controls come from Windows' media controls).
 
@@ -85,7 +88,7 @@ More detail in the [full documentation](glowline/README.md).
 - Audio is analysed **in memory on your PC**. It's never recorded, saved or uploaded.
 - The **microphone is never used**; the app denies microphone permission outright.
 - **No accounts, no analytics, no telemetry.**
-- The only network request is the optional lyrics lookup, which sends a song's **title, artist, album and length** to lrclib.net. Turn it off in *Settings → More → Lyrics in full screen*.
+- The only network request is the lyrics lookup, which sends a song's **title, artist, album and length** to lrclib.net. By default Glowline **asks first** for each new song; choose *Ask each time*, *Always* or *Off* in *Settings → More → Lyrics lookup*.
 
 ## Limitations
 

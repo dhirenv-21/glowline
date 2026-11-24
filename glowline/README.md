@@ -99,9 +99,12 @@ The two colors **flow around the screen** with slow organic noise ("light leakin
 
 Press the **full-screen** button (corners icon). The player becomes a full-screen lyrics view: cover, title and progress on the left, and **time-synced lyrics** on the right, over a slowly drifting, blurred version of the cover. The current line lifts into place in pure white, with a soft glow in the album's color that breathes with the music and a slim accent bar in the album's two colors beside it. Upcoming lines stay readable, sung lines recede, and the list glides to each new line with spring easing. Instrumental breaks show three dots that fill in over the break and pulse on the beat. Move the mouse to show the controls; they and the pointer hide after 2.5 s. **Esc** exits.
 
-- Lyrics come from **LRCLIB** (lrclib.net), a free, open lyrics database. No account or key. For each new track Glowline sends **only the title, artist, album and length** (never audio, never anything about you) and caches the answer in `%APPDATA%\glowline\lyrics-cache`, so each song is looked up once. "Not found" is retried after a day.
+- Lyrics come from **LRCLIB** (lrclib.net), a free, open lyrics database. No account or key. A lookup sends **only the song's title, artist, album and length** (never audio, never anything about you) and caches the answer in `%APPDATA%\glowline\lyrics-cache`, so each song is looked up at most once. "Not found" is retried after a day.
+- **Settings → More → Lyrics lookup** decides when that happens:
+  - **Ask each time** (default for new installs): lyrics already cached on this PC show straight away; for a new song, full screen shows a card, *"Show lyrics for this song?"*, with **Look up this song**, **Always look up** and **Turn lyrics off**. Nothing is sent until you choose.
+  - **Always**: every new song is looked up automatically. People upgrading from 0.4 with lyrics switched on keep this.
+  - **Off**: nothing is sent and full screen shows the player only.
 - Songs with only plain (unsynced) lyrics scroll gently with the song's progress. Instrumentals say so.
-- Turn it off in **Settings → More → Lyrics in full screen**. Nothing is sent while it's off.
 
 ### Quick manual check (2 minutes)
 
@@ -141,7 +144,7 @@ Settings live in Glowline's own local storage under `%APPDATA%\glowline`. **More
 - **The glow sits over screen content.** It's semi-transparent and click-through, but it tints the outer edge of whatever is underneath. Lower *Thickness* and *Glow* if it gets in the way.
 - **GPU use:** the blurred glow is GPU-rendered at your refresh rate. On battery, use Still mode or turn the edge glow off.
 - **macOS and Linux:** the overlay works, but system-audio loopback isn't wired up there (macOS would need ScreenCaptureKit audio with permission, Linux a PulseAudio/PipeWire monitor source). Use the local audio file fallback.
-- **Unsigned build:** SmartScreen warns on first run. Signing needs a paid code-signing certificate, which this project deliberately avoids.
+- **Unsigned build, no auto-update:** SmartScreen warns on first run, and updates are manual (run the newer installer over the old one; settings are kept). Verify downloads with the SHA-256 in the release notes. [docs/RELEASES.md](../docs/RELEASES.md) covers verification and the next steps for code signing and automatic updates.
 - **Lyrics depend on LRCLIB's catalog** and its timing. Very new or niche songs may have none, or slightly off timing. Glowline highlights each line a quarter-second early to feel in sync.
 
 ## Troubleshooting
@@ -150,7 +153,10 @@ Settings live in Glowline's own local storage under `%APPDATA%\glowline`. **More
 | --- | --- |
 | *"Listening… silent"* while Spotify plays | Make sure Spotify's output device is **Default** and its in-app volume isn't zero. Check *Windows Settings → System → Sound* that the device you hear is the default output. Bluetooth headsets in "Hands-Free" mode use a different device. |
 | *"Windows did not provide a system-audio (loopback) track"* | An output device must be enabled. Plug in or enable speakers or headphones, then click Start again. Remote Desktop sessions sometimes have no loopback device. |
-| *"Windows did not start system audio capture within 10 seconds"* | Wake or unlock the screen and press **Listen** again. If it keeps happening, restart Glowline. |
+| *"Windows did not start audio capture within 10 seconds"* | Wake or unlock the screen and press the **waveform** button again. If it keeps happening, restart Glowline. |
+| *"Listening stopped: Windows ended the audio capture…"* | Windows can end loopback capture when the PC sleeps or locks, or when you switch speakers/headphones. Press the **waveform** button to listen again. With **Start listening when Glowline opens** on, Glowline restarts it by itself after you wake or unlock the PC. |
+| Light stopped reacting after plugging in headphones or changing the output device | Turn listening off and on with the **waveform** button; capture follows the *current* default output device. |
+| Chip says **Listening (auto)** | Capture was started automatically (*Settings → More → Start listening when Glowline opens*). Press the waveform button to stop, or untick the setting. |
 | *"System audio capture… permission was declined"* | Only happens if capture was started without a Glowline button (shouldn't happen) or the app's session was blocked by policy. Restart Glowline and use the button. |
 | Glow doesn't show | Turn on **Glow around my screen** (Screen glow section) and tick at least one display. Exclusive-fullscreen games hide it. Try **Ctrl+Alt+G**. If another app owns that shortcut, Glowline logs a warning and you can use the checkbox. |
 | Glow on the wrong monitor or wrong size after docking | Untick and re-tick the display, or toggle the glow. Glowline refits on display changes, but some docks report late. |
