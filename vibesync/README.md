@@ -1,6 +1,6 @@
 # VibeSync
 
-*Formerly **Glowline**. Upgrading keeps your settings: on first launch, `%APPDATA%\Glowline` is moved to `%APPDATA%\VibeSync`, settings saved by Glowline are read, and the installer replaces the old Glowline install (same installer identity, `local.glowline.app`).*
+*Formerly **Glowline**. Upgrading keeps your settings: the installer replaces the old Glowline install (same installer identity, `local.glowline.app`; an in-place upgrade keeps using the existing `Programs\Glowline` folder, while fresh installs go to `Programs\VibeSync`). On first launch your settings and cached lyrics are moved from `%APPDATA%\Glowline` into `%APPDATA%\VibeSync` (only if VibeSync has no settings yet; nothing is overwritten), and a `MOVED-TO-VIBESYNC.txt` note is left in the old folder, which you can then delete.*
 
 Free, local ambient edge lighting for your Windows desktop. It reacts to **Spotify, or anything else playing through your speakers**. A transparent, click-through window draws a glow around the edges of the displays you pick. It pulses with the music, rotates gradually, or holds still.
 
@@ -158,6 +158,7 @@ Settings live in VibeSync's own local storage under `%APPDATA%\VibeSync`. **More
 | *"Windows did not start audio capture within 10 seconds"* | Wake or unlock the screen and press the **waveform** button again. If it keeps happening, restart VibeSync. |
 | *"Listening stopped: Windows ended the audio capture…"* | Windows can end loopback capture when the PC sleeps or locks, or when you switch speakers/headphones. Press the **waveform** button to listen again. With **Start listening when VibeSync opens** on, VibeSync restarts it by itself after you wake or unlock the PC. |
 | Light stopped reacting after plugging in headphones or changing the output device | Turn listening off and on with the **waveform** button; capture follows the *current* default output device. |
+| Installer closes immediately without installing | Seen once while testing: leftover **VibeSync** shortcuts (Start menu / Desktop) pointing to an app that had been removed made the bundled NSIS installer crash. Delete those shortcuts and run the installer again. |
 | Chip says **Listening (auto)** | Capture was started automatically (*Settings → More → Start listening when VibeSync opens*). Press the waveform button to stop, or untick the setting. |
 | *"System audio capture… permission was declined"* | Only happens if capture was started without a VibeSync button (shouldn't happen) or the app's session was blocked by policy. Restart VibeSync and use the button. |
 | Glow doesn't show | Turn on **Glow around my screen** (Screen glow section) and tick at least one display. Exclusive-fullscreen games hide it. Try **Ctrl+Alt+G**. If another app owns that shortcut, VibeSync logs a warning and you can use the checkbox. |

@@ -6,6 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const guard = require('./ipc-guard.cjs');
+const { migrateProfile } = require('./profile-migration.cjs');
 const { watchSpotify } = require('./spotify.cjs');
 const { startMediaWatcher } = require('./media.cjs');
 const { getLyrics } = require('./lyrics.cjs');
@@ -31,21 +32,16 @@ let media = null;
 let lastMedia = { type: 'media', session: false };
 let lastArt = null;
 
-// The app used to be called Glowline. On first launch after the rename, move its profile
-// (settings, display choices, cached lyrics) to the new folder so nothing is lost. If the move
-// isn't possible (e.g. the old app is still running), keep using the old folder.
+// The app used to be called Glowline. On first launch after the rename, move the user's data
+// (settings, display choices, cached lyrics) from %APPDATA%\Glowline into the new profile.
+// Runs before any window opens, so nothing has the storage open yet.
 function adoptLegacyProfile() {
   try {
-    const current = app.getPath('userData');
     const legacy = path.join(app.getPath('appData'), 'Glowline');
-    if (current.toLowerCase() === legacy.toLowerCase() || !fs.existsSync(legacy) || fs.existsSync(current)) return;
-    try {
-      fs.renameSync(legacy, current);
-    } catch {
-      app.setPath('userData', legacy);
-    }
+    const result = migrateProfile(legacy, app.getPath('userData'));
+    if (result.migrated) console.log(`[vibesync] moved ${result.moved.join(', ')} from ${legacy}`);
   } catch (err) {
-    console.warn('[vibesync] could not check for an older profile:', err.message);
+    console.warn('[vibesync] could not move data from the old Glowline profile:', err.message);
   }
 }
 

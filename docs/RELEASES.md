@@ -33,7 +33,7 @@ There's no auto-update. To update:
 
 1. Download the newer installer from the Releases page (and verify it as above).
 2. Close VibeSync (including the screen glow) and run the installer. It installs over the existing version.
-3. Your settings, display choices and cached lyrics live in `%APPDATA%\VibeSync` and are kept. (Upgrading from Glowline moves them there from `%APPDATA%\Glowline` on first launch.)
+3. Your settings, display choices and cached lyrics live in `%APPDATA%\VibeSync` and are kept. (Upgrading from Glowline moves them there from `%APPDATA%\Glowline` on first launch; the upgraded app stays in your existing `Programs\Glowline` folder.)
 
 To get notified of new versions, use **Watch → Custom → Releases** on the GitHub repository.
 
