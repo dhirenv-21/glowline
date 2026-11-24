@@ -1,0 +1,55 @@
+{
+  "name": "glowline",
+  "productName": "Glowline",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Free, local ambient edge lighting for your desktop that reacts to Spotify and other system audio.",
+  "author": "Glowline (personal project)",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --selftest",
+    "web": "node server.mjs",
+    "test": "node --test tests/core.test.mjs tests/server.test.mjs tests/markup.test.mjs tests/spotify.test.mjs tests/media.test.mjs tests/lyrics.test.mjs",
+    "dist": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --win --dir",
+    "build:media": "powershell -NoProfile -ExecutionPolicy Bypass -File electron/build-media-thumb.ps1"
+  },
+  "build": {
+    "appId": "local.glowline.app",
+    "productName": "Glowline",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "overlay.html",
+      "styles.css",
+      "overlay.css",
+      "src/**",
+      "electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "asarUnpack": [
+      "electron/media-helper.ps1",
+      "electron/GlowlineMediaThumb.dll"
+    ]
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.0.12"
+  }
+}

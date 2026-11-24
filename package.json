@@ -1,0 +1,13 @@
+{
+  "name": "music-clone",
+  "private": true,
+  "description": "Workspace wrapper: the Glowline app lives in ./glowline. These scripts forward to it so npm works from this folder too.",
+  "scripts": {
+    "start": "npm --prefix glowline start",
+    "test": "npm --prefix glowline test",
+    "selftest": "npm --prefix glowline run selftest",
+    "dist": "npm --prefix glowline run dist",
+    "web": "npm --prefix glowline run web",
+    "setup": "npm --prefix glowline install"
+  }
+}

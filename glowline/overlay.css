@@ -1,0 +1,19 @@
+/* Transparent full-display window; only the edge band and its inward glow are painted. */
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+.edge {
+  --thickness: 14px; --blur: 60px; --intensity: 0; --rim-bg: transparent;
+  position: fixed; inset: 0; pointer-events: none;
+}
+.edge-ring {
+  position: absolute; inset: 0;
+  padding: var(--thickness);
+  background: var(--rim-bg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+.edge-band { opacity: var(--intensity); }
+.edge-glow { position: absolute; inset: 0; filter: blur(var(--blur)); opacity: min(1, calc(var(--intensity) * 1.3)); }
+.glow-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+html.gl-on .edge { display: none; }
