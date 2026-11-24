@@ -301,6 +301,23 @@ app.on('web-contents-created', (_e, wc) => {
 // ---------- Self-test (used for automated verification; see README) ----------
 async function runSelfTest() {
   const outDir = SELFTEST_OUT || app.getPath('temp');
+  if (process.argv.includes('--selftest-autostart')) {
+    // Exercise the launch auto-start path exactly as the app uses it, then report what the UI says.
+    const js = (code) => control.webContents.executeJavaScript(code, true);
+    await js("document.getElementById('autoAudio').checked || document.getElementById('autoAudio').click()");
+    const result = await js("window.__glowlineAutoStart('launch')");
+    await new Promise((r) => setTimeout(r, 1500));
+    const ui = await js(`({
+      status: document.getElementById('status').textContent,
+      chip: document.getElementById('live-chip').textContent,
+      detection: document.getElementById('audio-detect-text').textContent,
+      listenPressed: document.getElementById('dock-listen').getAttribute('aria-pressed'),
+    })`);
+    const again = await js("window.__glowlineAutoStart('resume')");
+    await js("document.getElementById('system-audio-stop').click()");
+    const stopped = await js("({ chip: document.getElementById('live-chip').textContent, status: document.getElementById('status').textContent, listenPressed: document.getElementById('dock-listen').getAttribute('aria-pressed') })");
+    process.stdout.write(`SELFTEST-AUTOSTART ${JSON.stringify({ result, ui, secondCall: again, stopped })}\n`);
+  }
   const report = await control.webContents.executeJavaScript('window.__glowlineSelfTest()', true);
   report.spotify = spotifyStatus;
   report.overlays = [...overlays.keys()];
