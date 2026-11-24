@@ -58,7 +58,7 @@ function fakeFetch(routes, calls) {
 }
 
 test('getLyrics: exact match, caching, and only track metadata is sent', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'glowline-lyrics-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vibesync-lyrics-'));
   try {
     const calls = [];
     const fetchImpl = fakeFetch([['/api/get?', { syncedLyrics: '[00:01.00]Line one\n[00:04.00]Line two' }]], calls);
@@ -95,7 +95,7 @@ test('getLyrics: falls back to search, handles instrumental, none and network er
 });
 
 test('getLyrics with allowNetwork:false never calls the network', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'glowline-lyrics-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vibesync-lyrics-'));
   try {
     const calls = [];
     const fetchImpl = fakeFetch([['/api/get?', { syncedLyrics: '[00:01.00]Hello' }]], calls);

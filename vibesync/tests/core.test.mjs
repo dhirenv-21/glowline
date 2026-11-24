@@ -248,3 +248,19 @@ test('lyricsMode persists through storage, including the legacy migration', () =
   assert.equal(stored.lyricsMode, 'auto');
   assert.equal('lyrics' in stored, false);
 });
+
+test('settings saved under the old Glowline key are carried over', async () => {
+  const { LEGACY_STORAGE_KEYS } = await import('../src/core.js');
+  assert.deepEqual(LEGACY_STORAGE_KEYS, ['glowline:settings:v1']);
+  // What Glowline 0.4.x saved: no lyricsMode yet, a boolean `lyrics` instead.
+  const { lyricsMode, ...oldShape } = DEFAULTS;
+  const legacy = memoryStorage({ 'glowline:settings:v1': JSON.stringify({ ...oldShape, glow: 33, lyrics: true }) });
+  const loaded = loadSettings(legacy);
+  assert.equal(loaded.glow, 33);
+  assert.equal(loaded.lyricsMode, 'auto', 'old "lyrics on" still means automatic lookup');
+  saveSettings(legacy, loaded);
+  assert.equal(JSON.parse(legacy.getItem(STORAGE_KEY)).glow, 33, 'saved under the new key');
+  // The new key wins once it exists.
+  const both = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ ...DEFAULTS, glow: 70 }), 'glowline:settings:v1': JSON.stringify({ ...DEFAULTS, glow: 10 }) });
+  assert.equal(loadSettings(both).glow, 70);
+});

@@ -60,7 +60,7 @@ export function recoveryHint(reason, { autoAudio = false } = {}) {
   switch (reason) {
     case 'ended':
       return autoAudio
-        ? 'Listening stopped: Windows ended the audio capture (sleep, lock or an audio device change). Glowline restarts it when you unlock; or press the waveform button.'
+        ? 'Listening stopped: Windows ended the audio capture (sleep, lock or an audio device change). VibeSync restarts it when you unlock; or press the waveform button.'
         : 'Listening stopped: Windows ended the audio capture (sleep, lock or an audio device change). Press the waveform button to listen again.';
     case 'devicechange':
       return 'Your audio devices changed. If the light stops reacting, turn listening off and on again with the waveform button.';

@@ -10,7 +10,7 @@ let demoMode = false;
 import { createWheel } from './wheel.js';
 import { releaseStream, safeDisconnect, createStartGate, withTimeout, recoveryHint } from './audio-lifecycle.js';
 
-const desktop = window.glowlineDesktop ?? null;
+const desktop = window.vibesyncDesktop ?? null;
 const $ = (sel) => document.querySelector(sel);
 const form = $('#controls');
 const stage = $('#stage');
@@ -226,10 +226,14 @@ $('#detect-displays').addEventListener('click', async () => {
 });
 
 // ---------- Desktop edge overlay ----------
-const OVERLAY_DISPLAYS_KEY = 'glowline:overlay-displays:v1';
+const OVERLAY_DISPLAYS_KEY = 'vibesync:overlay-displays:v1';
 let displays = [];
 let overlayDisplayIds = (() => {
-  try { const v = JSON.parse(storage?.getItem(OVERLAY_DISPLAYS_KEY) ?? '[]'); return Array.isArray(v) ? v.map(Number) : []; } catch { return []; }
+  try {
+    const saved = storage?.getItem(OVERLAY_DISPLAYS_KEY) ?? storage?.getItem('glowline:overlay-displays:v1'); // key used before the rename
+    const v = JSON.parse(saved ?? '[]');
+    return Array.isArray(v) ? v.map(Number) : [];
+  } catch { return []; }
 })();
 
 function renderOverlayDisplays() {
@@ -689,7 +693,7 @@ const audio = {
   ctx: null, analyser: null, freq: null, time: null,
   kind: null, // 'system' | 'file' | null
   systemStream: null, systemNode: null, elementSource: null, fileUrl: null,
-  autoStarted: false, // started by "Start listening when Glowline opens" (or after wake/unlock)
+  autoStarted: false, // started by "Start listening when VibeSync opens" (or after wake/unlock)
   stopReason: null,   // 'ended' when Windows stopped capture on its own
 };
 const audioEl = $('#audio-el');
@@ -1048,13 +1052,13 @@ window.addEventListener('pagehide', () => {
 if (desktop) {
   const ready = initDesktop();
   // Called by the main process (with a user gesture) once the window has loaded.
-  window.__glowlineAutoStart = async (reason = 'launch') => {
+  window.__vibesyncAutoStart = async (reason = 'launch') => {
     await ready;
     if (!settings.autoAudio || audio.kind || startGate.busy || demoMode) return 'skipped';
     try {
       await startSystemAudio({ auto: true });
       setStatus(reason === 'launch'
-        ? 'Started listening automatically ("Start listening when Glowline opens" is on). Press the waveform button to stop.'
+        ? 'Started listening automatically ("Start listening when VibeSync opens" is on). Press the waveform button to stop.'
         : `Started listening again after ${reason === 'resume' ? 'waking up' : 'unlocking'} (auto-start is on).`);
       return 'started';
     } catch (err) {
@@ -1066,7 +1070,7 @@ if (desktop) {
 
 // ---------- Self-test hook used by `npm run selftest` (desktop only) ----------
 if (desktop) {
-  window.__glowlineSelfTest = async (seconds = 6) => {
+  window.__vibesyncSelfTest = async (seconds = 6) => {
     const report = { ok: false };
     try {
       report.trackLabel = await startSystemAudio();

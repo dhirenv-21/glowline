@@ -1,4 +1,4 @@
-// Glowline desktop shell (Electron main process).
+// VibeSync desktop shell (Electron main process).
 'use strict';
 
 const { app, BrowserWindow, ipcMain, screen, session, desktopCapturer, globalShortcut, shell, powerMonitor } = require('electron');
@@ -21,7 +21,7 @@ const DEMO = process.argv.includes('--demo') || !!SHOTS_DIR;
 let control = null;
 /** @type {Map<number, BrowserWindow>} */
 const overlays = new Map();
-/** One-shot capture permit set by a Glowline control: { kind, displayId, expires }. */
+/** One-shot capture permit set by a VibeSync control: { kind, displayId, expires }. */
 let pendingCapture = null;
 /** Settings sanitizer from src/core.js (ES module, loaded at startup). */
 let sanitizeSettings = null;
@@ -31,9 +31,30 @@ let media = null;
 let lastMedia = { type: 'media', session: false };
 let lastArt = null;
 
+// The app used to be called Glowline. On first launch after the rename, move its profile
+// (settings, display choices, cached lyrics) to the new folder so nothing is lost. If the move
+// isn't possible (e.g. the old app is still running), keep using the old folder.
+function adoptLegacyProfile() {
+  try {
+    const current = app.getPath('userData');
+    const legacy = path.join(app.getPath('appData'), 'Glowline');
+    if (current.toLowerCase() === legacy.toLowerCase() || !fs.existsSync(legacy) || fs.existsSync(current)) return;
+    try {
+      fs.renameSync(legacy, current);
+    } catch {
+      app.setPath('userData', legacy);
+    }
+  } catch (err) {
+    console.warn('[vibesync] could not check for an older profile:', err.message);
+  }
+}
+
 // Self-test runs use their own profile so they never touch (or collide with) your real settings.
-if (SELFTEST || DEMO) app.setPath('userData', path.join(app.getPath('temp'), DEMO ? 'glowline-demo' : 'glowline-selftest'));
-else if (!app.requestSingleInstanceLock()) app.quit();
+if (SELFTEST || DEMO) app.setPath('userData', path.join(app.getPath('temp'), DEMO ? 'vibesync-demo' : 'vibesync-selftest'));
+else {
+  adoptLegacyProfile();
+  if (!app.requestSingleInstanceLock()) app.quit();
+}
 app.on('second-instance', () => {
   if (control) { if (control.isMinimized()) control.restore(); control.focus(); }
 });
@@ -52,7 +73,7 @@ function createControlWindow() {
     height: 820,
     minWidth: 420,
     minHeight: 560,
-    title: 'Glowline',
+    title: 'VibeSync',
     icon: path.join(ROOT, 'build', 'icon.png'),
     backgroundColor: '#000000',
     autoHideMenuBar: true,
@@ -80,7 +101,7 @@ function isControlContents(wc) {
   return !!control && !control.isDestroyed() && wc === control.webContents;
 }
 
-/** '' when the sender is the control window's top-level frame showing Glowline's own index.html; otherwise why not. */
+/** '' when the sender is the control window's top-level frame showing VibeSync's own index.html; otherwise why not. */
 function untrustedReason(event) {
   const frame = event?.senderFrame;
   if (!frame) return 'no sender frame';
@@ -98,7 +119,7 @@ function logRejected(channel, why) {
   const now = Date.now();
   if (now - lastRejectLog < 2000) return; // don't let a misbehaving page flood the log
   lastRejectLog = now;
-  console.warn(`[glowline] rejected ${channel}: ${why}`);
+  console.warn(`[vibesync] rejected ${channel}: ${why}`);
 }
 
 /** ipcMain.handle with a sender check. Untrusted callers get an error, nothing runs. */
@@ -142,7 +163,7 @@ function createOverlay(display) {
     hasShadow: false,
     alwaysOnTop: true,
     show: false,
-    title: 'Glowline overlay',
+    title: 'VibeSync overlay',
     webPreferences,
   });
   win.setIgnoreMouseEvents(true); // clicks pass straight through to the apps underneath
@@ -202,8 +223,8 @@ function describeDisplays() {
 function installCaptureHandlers() {
   const ses = session.defaultSession;
 
-  // Glowline never asks for the microphone or camera ('media' is always denied). The only
-  // capture it allows is 'display-capture', and only right after a Glowline control declared
+  // VibeSync never asks for the microphone or camera ('media' is always denied). The only
+  // capture it allows is 'display-capture', and only right after a VibeSync control declared
   // what it is for (system-audio loopback or screen colour sampling).
   ses.setPermissionRequestHandler((wc, permission, callback) => {
     if (!isControlContents(wc)) return callback(false);
@@ -222,10 +243,10 @@ function installCaptureHandlers() {
       const fromControl = !!frame && !!main && frame.processId === main.processId && frame.routingId === main.routingId
         && guard.isAppPageUrl(frame.url, ROOT, ['index.html']);
       if (!fromControl) throw new Error('Capture requested by an unexpected page.');
-      if (!want) throw new Error('No capture was requested by a Glowline control (or the request expired).');
+      if (!want) throw new Error('No capture was requested by a VibeSync control (or the request expired).');
       if (want.kind === 'system-audio') {
         if (process.platform !== 'win32') throw new Error('System audio loopback is only supported on Windows in this build.');
-        // getDisplayMedia needs a video track. Use Glowline's own page (an in-process capture)
+        // getDisplayMedia needs a video track. Use VibeSync's own page (an in-process capture)
         // rather than the desktop, so loopback never depends on Windows desktop duplication,
         // which fails while the display sleeps or on some hybrid-GPU laptops. The renderer
         // stops this video track immediately and keeps only the WASAPI loopback audio.
@@ -237,7 +258,7 @@ function installCaptureHandlers() {
       const source = sources.find((s) => String(s.display_id) === String(want.displayId)) ?? sources[0];
       callback({ video: source });
     } catch (err) {
-      console.warn('[glowline] capture refused:', err.message);
+      console.warn('[vibesync] capture refused:', err.message);
       callback({});
     }
   });
@@ -287,7 +308,7 @@ function installIpc() {
   });
 }
 
-// Every web page Glowline creates (control and overlays) may not open windows, navigate away
+// Every web page VibeSync creates (control and overlays) may not open windows, navigate away
 // or embed <webview>s.
 app.on('web-contents-created', (_e, wc) => {
   wc.on('will-attach-webview', (ev) => ev.preventDefault());
@@ -305,7 +326,7 @@ async function runSelfTest() {
     // Exercise the launch auto-start path exactly as the app uses it, then report what the UI says.
     const js = (code) => control.webContents.executeJavaScript(code, true);
     await js("document.getElementById('autoAudio').checked || document.getElementById('autoAudio').click()");
-    const result = await js("window.__glowlineAutoStart('launch')");
+    const result = await js("window.__vibesyncAutoStart('launch')");
     await new Promise((r) => setTimeout(r, 1500));
     const ui = await js(`({
       status: document.getElementById('status').textContent,
@@ -313,12 +334,12 @@ async function runSelfTest() {
       detection: document.getElementById('audio-detect-text').textContent,
       listenPressed: document.getElementById('dock-listen').getAttribute('aria-pressed'),
     })`);
-    const again = await js("window.__glowlineAutoStart('resume')");
+    const again = await js("window.__vibesyncAutoStart('resume')");
     await js("document.getElementById('system-audio-stop').click()");
     const stopped = await js("({ chip: document.getElementById('live-chip').textContent, status: document.getElementById('status').textContent, listenPressed: document.getElementById('dock-listen').getAttribute('aria-pressed') })");
     process.stdout.write(`SELFTEST-AUTOSTART ${JSON.stringify({ result, ui, secondCall: again, stopped })}\n`);
   }
-  const report = await control.webContents.executeJavaScript('window.__glowlineSelfTest()', true);
+  const report = await control.webContents.executeJavaScript('window.__vibesyncSelfTest()', true);
   report.spotify = spotifyStatus;
   report.overlays = [...overlays.keys()];
   report.displays = describeDisplays();
@@ -357,7 +378,7 @@ async function runSelfTest() {
   const ov = overlays.values().next().value;
   if (ov && !ov.isDestroyed()) {
     const overlayState = await ov.webContents.executeJavaScript(
-      "({ framesReceived: window.__glowlineFrames ?? 0, gpu: document.documentElement.classList.contains('gl-on') })",
+      "({ framesReceived: window.__vibesyncFrames ?? 0, gpu: document.documentElement.classList.contains('gl-on') })",
     ).catch((e) => ({ error: e.message }));
     process.stdout.write(`SELFTEST-OVERLAY ${JSON.stringify(overlayState)}\n`);
   }
@@ -424,20 +445,20 @@ app.whenReady().then(async () => {
     powerMonitor.on(evt, () => control?.webContents.send('power', evt));
   }
   powerMonitor.on('resume', () => setTimeout(() => {
-    control?.webContents.executeJavaScript('window.__glowlineAutoStart?.("resume")', true).catch(() => {});
+    control?.webContents.executeJavaScript('window.__vibesyncAutoStart?.("resume")', true).catch(() => {});
   }, 2500));
   powerMonitor.on('unlock-screen', () => setTimeout(() => {
-    control?.webContents.executeJavaScript('window.__glowlineAutoStart?.("unlock")', true).catch(() => {});
+    control?.webContents.executeJavaScript('window.__vibesyncAutoStart?.("unlock")', true).catch(() => {});
   }, 1500));
 
   if (!globalShortcut.register(OVERLAY_SHORTCUT, () => control?.webContents.send('shortcut', 'toggle-overlay'))) {
-    console.warn(`[glowline] ${OVERLAY_SHORTCUT} is in use by another app; use the on-screen toggle instead.`);
+    console.warn(`[vibesync] ${OVERLAY_SHORTCUT} is in use by another app; use the on-screen toggle instead.`);
   }
 
   if (SHOTS_DIR) control.webContents.once('did-finish-load', () => setTimeout(captureScreenshots, 300));
   else if (SELFTEST) control.webContents.once('did-finish-load', () => setTimeout(runSelfTest, 500));
   else control.webContents.once('did-finish-load', () => {
-    control.webContents.executeJavaScript('window.__glowlineAutoStart?.()', true).catch(() => {});
+    control.webContents.executeJavaScript('window.__vibesyncAutoStart?.()', true).catch(() => {});
   });
 });
 

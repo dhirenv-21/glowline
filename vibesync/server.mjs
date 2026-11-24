@@ -42,6 +42,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const i = process.argv.indexOf('--port');
   const port = i > -1 ? Number(process.argv[i + 1]) : 5173;
   createAppServer().listen(port, '127.0.0.1', () => {
-    console.log(`Glowline running at http://localhost:${port}  (Ctrl+C to stop)`);
+    console.log(`VibeSync running at http://localhost:${port}  (Ctrl+C to stop)`);
   });
 }

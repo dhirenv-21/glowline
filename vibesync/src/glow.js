@@ -118,7 +118,7 @@ export function createGlowRenderer(canvas, { radius = 0, maxScale = 2 } = {}) {
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   } catch (err) {
-    console.warn('[glowline] WebGL glow unavailable, using CSS fallback:', err.message);
+    console.warn('[vibesync] WebGL glow unavailable, using CSS fallback:', err.message);
     return null;
   }
   gl.useProgram(prog);

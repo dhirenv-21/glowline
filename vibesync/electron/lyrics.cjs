@@ -8,7 +8,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const API = 'https://lrclib.net/api';
-const USER_AGENT = 'Glowline/0.4 (personal desktop app)';
+const USER_AGENT = 'VibeSync/0.5 (personal desktop app)';
 const NOT_FOUND_TTL_MS = 24 * 60 * 60 * 1000; // retry misses after a day
 
 /** Parse LRC text into [{ t: seconds, text }] sorted by time. Handles several stamps per line and [offset:]. */

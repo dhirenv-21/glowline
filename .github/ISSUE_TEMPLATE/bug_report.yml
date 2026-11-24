@@ -14,13 +14,13 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Open Glowline
+        1. Open VibeSync
         2. Press the waveform button
         3. ...
   - type: input
     id: version
     attributes:
-      label: Glowline version
+      label: VibeSync version
       placeholder: "0.4.1"
   - type: input
     id: windows

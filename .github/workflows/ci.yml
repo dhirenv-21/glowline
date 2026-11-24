@@ -10,14 +10,14 @@ jobs:
     runs-on: windows-latest
     defaults:
       run:
-        working-directory: glowline
+        working-directory: vibesync
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: glowline/package-lock.json
+          cache-dependency-path: vibesync/package-lock.json
       - name: Install dependencies
         run: npm ci
         env:

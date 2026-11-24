@@ -11,7 +11,7 @@ test('static server serves app files and blocks everything else', async (t) => {
   const index = await fetch(`${base}/`);
   assert.equal(index.status, 200);
   assert.match(index.headers.get('content-type'), /text\/html/);
-  assert.match(await index.text(), /<title>Glowline<\/title>/);
+  assert.match(await index.text(), /<title>VibeSync<\/title>/);
 
   const js = await fetch(`${base}/src/core.js`);
   assert.equal(js.status, 200);

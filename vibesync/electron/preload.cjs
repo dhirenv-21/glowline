@@ -9,7 +9,7 @@ const on = (channel) => (fn) => {
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
-contextBridge.exposeInMainWorld('glowlineDesktop', {
+contextBridge.exposeInMainWorld('vibesyncDesktop', {
   platform: process.platform,
   getInfo: () => ipcRenderer.invoke('app:info'),
   listDisplays: () => ipcRenderer.invoke('displays:list'),

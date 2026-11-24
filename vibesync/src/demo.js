@@ -22,7 +22,7 @@ export function demoCoverArt(size = 512) {
   blob(size * 0.28, size * 0.3, size * 0.55, 'rgba(124,108,255,0.95)');
   blob(size * 0.78, size * 0.7, size * 0.55, 'rgba(0,214,190,0.85)');
   blob(size * 0.7, size * 0.18, size * 0.35, 'rgba(255,79,160,0.75)');
-  // a glowing rounded "screen" outline, Glowline's mark
+  // a glowing rounded "screen" outline, VibeSync's mark
   g.lineWidth = size * 0.035;
   g.strokeStyle = 'rgba(255,255,255,0.92)';
   g.shadowColor = 'rgba(255,255,255,0.9)';
@@ -36,12 +36,20 @@ export function demoCoverArt(size = 512) {
   g.arcTo(x, y, x + w, y, r);
   g.closePath();
   g.stroke();
+  // VibeSync's music pulse through the screen
+  const pulse = [[0.26, 0.5], [0.37, 0.5], [0.41, 0.44], [0.46, 0.59], [0.5, 0.37], [0.55, 0.63], [0.6, 0.46], [0.63, 0.5], [0.74, 0.5]];
+  g.lineWidth = size * 0.03;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.beginPath();
+  pulse.forEach(([px, py], i) => (i ? g.lineTo(px * size, py * size) : g.moveTo(px * size, py * size)));
+  g.stroke();
   return c.toDataURL('image/png');
 }
 
 export const DEMO_TRACK = {
   title: 'Neon Tides',
-  artist: 'Glowline Demo',
+  artist: 'VibeSync Demo',
   album: 'Night Drive',
   duration: 214,
   start: 52,

@@ -1,6 +1,8 @@
-// Pure, DOM-free logic for Glowline. Everything here is unit-tested in tests/core.test.mjs.
+// Pure, DOM-free logic for VibeSync. Everything here is unit-tested in tests/core.test.mjs.
 
-export const STORAGE_KEY = 'glowline:settings:v1';
+export const STORAGE_KEY = 'vibesync:settings:v1';
+/** Keys used by earlier versions (the app was called Glowline); read once, then saved under STORAGE_KEY. */
+export const LEGACY_STORAGE_KEYS = Object.freeze(['glowline:settings:v1']);
 
 export const PRESETS = Object.freeze([
   { id: 'ember', name: 'Ember', primary: '#ff6a3d', secondary: '#ffc861' },
@@ -94,7 +96,8 @@ export function lyricsRequestPolicy(mode, approvedForThisSong = false) {
 /** Read settings from a Storage-like object. Never throws. */
 export function loadSettings(storage) {
   try {
-    const raw = storage?.getItem(STORAGE_KEY);
+    let raw = storage?.getItem(STORAGE_KEY);
+    for (const key of LEGACY_STORAGE_KEYS) raw ??= storage?.getItem(key);
     return sanitizeSettings(raw ? JSON.parse(raw) : null);
   } catch {
     return { ...DEFAULTS };

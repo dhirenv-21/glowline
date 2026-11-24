@@ -1,9 +1,9 @@
 {
-  "name": "glowline",
-  "productName": "Glowline",
-  "version": "0.4.1",
+  "name": "vibesync",
+  "productName": "VibeSync",
+  "version": "0.5.0",
   "private": true,
-  "description": "Free, local ambient edge lighting for your desktop that reacts to Spotify and other system audio.",
+  "description": "Ambient light for your Windows screen that pulses with Spotify: beat-reactive GPU glow, album-art colors, cover art and full-screen synced lyrics.",
   "author": "Dhiren Vasudeva",
   "type": "module",
   "main": "electron/main.cjs",
@@ -24,7 +24,7 @@
   },
   "build": {
     "appId": "local.glowline.app",
-    "productName": "Glowline",
+    "productName": "VibeSync",
     "directories": {
       "output": "dist"
     },
@@ -48,13 +48,13 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "shortcutName": "Glowline"
+      "shortcutName": "VibeSync"
     },
     "asarUnpack": [
       "electron/media-helper.ps1",
-      "electron/GlowlineMediaThumb.dll"
+      "electron/VibeSyncMediaThumb.dll"
     ],
-    "artifactName": "Glowline-Setup-${version}.${ext}"
+    "artifactName": "VibeSync-Setup-${version}.${ext}"
   },
   "devDependencies": {
     "electron": "45.4.1",
@@ -62,7 +62,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dhirenv-21/glowline.git"
+    "url": "https://github.com/dhirenv-21/vibesync.git"
   },
-  "homepage": "https://github.com/dhirenv-21/glowline"
+  "homepage": "https://github.com/dhirenv-21/vibesync"
 }

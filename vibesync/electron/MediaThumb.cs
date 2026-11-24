@@ -7,7 +7,7 @@ using Windows.Foundation;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
-public static class GlowlineMediaThumb
+public static class VibeSyncMediaThumb
 {
     static T Wait<T>(IAsyncOperation<T> op, int timeoutMs)
     {

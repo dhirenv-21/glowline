@@ -61,7 +61,7 @@ html.is-desktop .topbar { padding-right: 150px; } /* room for the Windows min/ma
 .topbar button, .topbar .live-chip { -webkit-app-region: no-drag; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; letter-spacing: -.01em; }
-.brand-mark { width: 20px; height: 20px; fill: none; stroke: var(--accent); stroke-width: 3; filter: drop-shadow(0 0 6px var(--accent)); }
+.brand-mark { width: 24px; height: 24px; filter: drop-shadow(0 0 5px rgba(255, 79, 160, .55)); }
 .icon-btn {
   display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px;
   border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text);

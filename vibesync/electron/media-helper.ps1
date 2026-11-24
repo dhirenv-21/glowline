@@ -1,4 +1,4 @@
-# Glowline media helper (Windows only).
+# VibeSync media helper (Windows only).
 # Reads "now playing" info from Windows' Global System Media Transport Controls: the same
 # local source the Windows volume flyout uses. No network, no Spotify account or API key.
 # Prints one JSON object per line on changes; accepts commands on stdin: play-pause, next, previous, quit.
@@ -29,13 +29,13 @@ function Find-Session {
   return $null
 }
 
-# Cover art is read by a tiny compiled helper (MediaThumb.cs → GlowlineMediaThumb.dll),
+# Cover art is read by a tiny compiled helper (MediaThumb.cs → VibeSyncMediaThumb.dll),
 # because PowerShell 5.1 can't pass WinRT streams to the stream readers itself.
 $thumbOk = $false
-try { Add-Type -Path (Join-Path $PSScriptRoot 'GlowlineMediaThumb.dll'); $thumbOk = $true } catch { }
+try { Add-Type -Path (Join-Path $PSScriptRoot 'VibeSyncMediaThumb.dll'); $thumbOk = $true } catch { }
 function Read-Thumbnail($props) {
   if (-not $thumbOk -or -not $props.Thumbnail) { return $null }
-  try { return [GlowlineMediaThumb]::Read($props, 3000) } catch { return $null }
+  try { return [VibeSyncMediaThumb]::Read($props, 3000) } catch { return $null }
 }
 
 function Emit($obj) { [Console]::Out.WriteLine(($obj | ConvertTo-Json -Compress -Depth 3)); [Console]::Out.Flush() }
@@ -47,7 +47,7 @@ $lastTrack = ''
 $lastSecond = -1
 
 while ($true) {
-  # Commands from Glowline
+  # Commands from VibeSync
   while ($pending.IsCompleted) {
     $cmd = $pending.Result
     if ($null -eq $cmd -or $cmd -eq 'quit') { exit 0 }
