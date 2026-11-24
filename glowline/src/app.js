@@ -2,12 +2,13 @@ import {
   DEFAULTS, PRESETS, sanitizeSettings, loadSettings, saveSettings, findPreset,
   sampleEdgeColors, computeLevel, computeRms, smoothLevel, frameState, gradientCss, nextTheme,
   describeMediaError, createBeatDetector, computeBassLevel, createActivityTracker, createAutoGain, extractPalette,
-  activeLineIndex,
+  activeLineIndex, lyricsRequestPolicy,
 } from './core.js';
 import { createGlowRenderer } from './glow.js';
 import { demoCoverArt, demoSignal, DEMO_TRACK, DEMO_LYRICS } from './demo.js';
 let demoMode = false;
 import { createWheel } from './wheel.js';
+import { releaseStream, safeDisconnect, createStartGate, withTimeout, recoveryHint } from './audio-lifecycle.js';
 
 const desktop = window.glowlineDesktop ?? null;
 const $ = (sel) => document.querySelector(sel);
@@ -113,7 +114,7 @@ form.addEventListener('input', (e) => {
   const manualColor = t.name === 'primary' || t.name === 'secondary';
   update({ [t.name]: value, ...(manualColor ? { albumColors: false } : {}) });
   if (t.name === 'albumColors' && value) applyAlbumPalette();
-  if (t.name === 'lyrics') loadLyrics({ force: true });
+  if (t.name === 'lyricsMode') loadLyrics({ force: true });
 });
 form.addEventListener('submit', (e) => e.preventDefault());
 
@@ -451,6 +452,9 @@ const lyricsBox = $('#lyrics');
 const lyricsTrack = $('#lyrics-track');
 const lyricsNote = $('#lyrics-note');
 const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1, y: 0, target: 0, breath: -1 };
+const lyricsConsent = $('#lyrics-consent');
+/** Songs the user said "Look up this song" for, this session only (mode 'ask'). */
+const lyricsApproved = new Set();
 
 function lyricsKey() { return media.session && media.title ? `${media.artist}|${media.title}` : null; }
 
@@ -489,6 +493,7 @@ function showLyrics(res) {
   } else {
     lyr.els = [];
   }
+  lyricsConsent.hidden = res.status !== 'needs-consent';
   lyricsNote.textContent = {
     loading: 'Finding lyrics…',
     none: 'No lyrics found for this song.',
@@ -500,19 +505,41 @@ function showLyrics(res) {
 }
 
 async function loadLyrics({ force = false } = {}) {
-  stage.classList.toggle('lyrics-off', !settings.lyrics || !desktop);
-  if (!desktop?.getLyrics || !settings.lyrics) { lyr.key = null; showLyrics({ status: settings.lyrics ? 'idle' : 'off' }); return; }
+  const off = settings.lyricsMode === 'off';
+  stage.classList.toggle('lyrics-off', off || !desktop);
+  if (!desktop?.getLyrics || off) { lyr.key = null; showLyrics({ status: off ? 'off' : 'idle' }); return; }
   const key = lyricsKey();
   if (!key) { lyr.key = null; showLyrics({ status: 'idle' }); return; }
   if (key === lyr.key && !force) return;
   lyr.key = key;
+  // 'ask' mode: only the local cache is used until the user approves this song.
+  const policy = lyricsRequestPolicy(settings.lyricsMode, lyricsApproved.has(key));
   showLyrics({ status: 'loading' });
   const res = demoMode
     ? { status: 'synced', lines: DEMO_LYRICS }
-    : await desktop.getLyrics({ title: media.title, artist: media.artist, album: media.album, duration: media.duration });
+    : await desktop.getLyrics({
+      title: media.title, artist: media.artist, album: media.album, duration: media.duration,
+      allowNetwork: policy === 'network',
+    });
   if (lyr.key !== key) return; // the track changed while we were waiting
   showLyrics(res ?? { status: 'error' });
 }
+
+$('#lyrics-once').addEventListener('click', () => {
+  const key = lyricsKey();
+  if (key) lyricsApproved.add(key);
+  loadLyrics({ force: true });
+});
+$('#lyrics-always').addEventListener('click', () => {
+  update({ lyricsMode: 'auto' });
+  setStatus('Lyrics will be looked up automatically. Change this in Settings, More, Lyrics lookup.');
+  loadLyrics({ force: true });
+});
+$('#lyrics-never').addEventListener('click', () => {
+  update({ lyricsMode: 'off' });
+  setStatus('Lyrics are off. Nothing is sent to lrclib.net. Turn them back on in Settings, More.');
+  loadLyrics({ force: true });
+});
 
 let lastLyricsTime = performance.now();
 function renderLyrics(now) {
@@ -661,7 +688,9 @@ function stopScreen(message) {
 const audio = {
   ctx: null, analyser: null, freq: null, time: null,
   kind: null, // 'system' | 'file' | null
-  systemStream: null, systemNode: null, elementSource: null,
+  systemStream: null, systemNode: null, elementSource: null, fileUrl: null,
+  autoStarted: false, // started by "Start listening when Glowline opens" (or after wake/unlock)
+  stopReason: null,   // 'ended' when Windows stopped capture on its own
 };
 const audioEl = $('#audio-el');
 const signal = { level: 0, beat: 0, bass: 0, rms: 0, audible: false };
@@ -695,76 +724,117 @@ class CaptureError extends Error {
   constructor(name, message) { super(message); this.name = name; }
 }
 
-async function startSystemAudio() {
+const startGate = createStartGate();
+
+function setListenUi(listening, busy = false) {
+  const start = $('#system-audio-start');
+  const stop = $('#system-audio-stop');
+  start.hidden = listening;
+  stop.hidden = !listening;
+  start.disabled = busy;
+  start.setAttribute('aria-busy', String(busy));
+  $('#dock-listen').setAttribute('aria-pressed', String(listening));
+  $('#dock-listen').setAttribute('aria-busy', String(busy));
+}
+
+/**
+ * Start Windows loopback capture. Everything acquired along the way (the display stream,
+ * its tracks, the Web Audio node) is released if any step fails, times out, or is
+ * superseded by a newer start/stop before it finishes.
+ */
+async function startSystemAudio({ auto = false } = {}) {
   if (!navigator.mediaDevices?.getDisplayMedia) {
     throw new CaptureError('NotSupportedError', 'System audio capture is not available here.');
   }
   const ctx = ensureAudioContext();
   stopFile();
   stopSystemAudio();
-  if (desktop) await desktop.prepareCapture('system-audio', displays.find((d) => d.primary)?.id);
-  const request = navigator.mediaDevices.getDisplayMedia(
-    desktop
-      ? { video: true, audio: true }
-      : { video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: 'include', selfBrowserSurface: 'exclude' },
-  );
-  // On Windows the loopback stream rides on a screen capture. If the display is asleep or
-  // another app blocks desktop duplication, that request can stall instead of failing.
-  let timer;
-  const stream = desktop
-    ? await Promise.race([
-      request,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new CaptureError('TimeoutError',
-          'Windows did not start system audio capture within 10 seconds. This happens when the display is asleep or locked, or when desktop capture is blocked. Wake the screen and press "Listen" again.')), 10000);
-      }),
-    ]).finally(() => clearTimeout(timer))
-    : await request;
-  // If the stalled request completes after we gave up, release it immediately.
-  if (desktop) request.then((late) => { if (late !== stream) late.getTracks().forEach((t) => t.stop()); }).catch(() => {});
-  // Only the audio is used; drop the (mandatory) video track straight away.
-  stream.getVideoTracks().forEach((t) => t.stop());
-  const tracks = stream.getAudioTracks();
-  if (tracks.length === 0) {
-    throw new CaptureError(
-      'NoAudioTrack',
+  const token = startGate.begin();
+  setListenUi(false, true);
+  let stream = null;
+  let node = null;
+  try {
+    if (desktop) await desktop.prepareCapture('system-audio', displays.find((d) => d.primary)?.id);
+    const request = navigator.mediaDevices.getDisplayMedia(
       desktop
-        ? 'Windows did not provide a system-audio (loopback) track. Check that an output device is enabled in Sound settings, then try again.'
-        : 'No system audio was shared. Choose "Entire screen" and tick "Also share system audio" in the share dialog (Chrome or Edge on Windows).',
+        ? { video: true, audio: true }
+        : { video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: 'include', selfBrowserSurface: 'exclude' },
     );
+    // On Windows the loopback stream rides on a capture request that can stall (display asleep,
+    // capture blocked). Give up after 10 s, and stop the stream if it turns up later.
+    stream = desktop
+      ? await withTimeout(request, 10000, () => new CaptureError('TimeoutError',
+        'Windows did not start audio capture within 10 seconds. This happens while the screen is asleep or locked. Wake the screen, then press the waveform button again.'), releaseStream)
+      : await request;
+    if (!startGate.isCurrent(token)) throw new CaptureError('AbortError', 'Listening was cancelled.');
+    // Only the audio is used; drop the (mandatory) video track straight away.
+    stream.getVideoTracks().forEach((t) => t.stop());
+    const tracks = stream.getAudioTracks();
+    if (tracks.length === 0) {
+      throw new CaptureError(
+        'NoAudioTrack',
+        desktop
+          ? 'Windows did not provide a system-audio (loopback) track. Check that an output device is enabled in Sound settings, then try again.'
+          : 'No system audio was shared. Choose "Entire screen" and tick "Also share system audio" in the share dialog (Chrome or Edge on Windows).',
+      );
+    }
+    node = ctx.createMediaStreamSource(new MediaStream(tracks));
+    node.connect(audio.analyser); // analysed only, never played back
+    audio.systemStream = stream;
+    audio.systemNode = node;
+    // Only react if *this* stream ends (an old, replaced stream must not stop a new one).
+    tracks[0].addEventListener('ended', () => {
+      if (audio.systemStream === stream) stopSystemAudio({ reason: 'ended' });
+    });
+    audio.kind = 'system';
+    audio.autoStarted = auto;
+    audio.stopReason = null;
+    resetAnalysis();
+    setListenUi(true);
+    if (settings.motion !== 'music') update({ motion: 'music' });
+    renderHelp();
+    renderDetection();
+    return tracks[0].label || 'system audio';
+  } catch (err) {
+    safeDisconnect(node);
+    releaseStream(stream);
+    if (startGate.isCurrent(token)) setListenUi(false);
+    throw err;
+  } finally {
+    startGate.finish(token);
+    if (!audio.systemStream && startGate.isCurrent(token)) setListenUi(false);
   }
-  audio.systemStream = new MediaStream(tracks);
-  audio.systemNode = ctx.createMediaStreamSource(audio.systemStream);
-  audio.systemNode.connect(audio.analyser); // analysed only, never played back
-  tracks[0].addEventListener('ended', () => stopSystemAudio('System audio capture ended.'));
-  audio.kind = 'system';
-  resetAnalysis();
-  $('#system-audio-start').hidden = true;
-  $('#system-audio-stop').hidden = false;
-  $('#dock-listen').setAttribute('aria-pressed', 'true');
-  if (settings.motion !== 'music') update({ motion: 'music' });
-  renderHelp();
-  renderDetection();
-  return tracks[0].label || 'system audio';
 }
 
-function stopSystemAudio(message) {
+/**
+ * Stop listening and release everything. Accepts a status message string (old callers) or
+ * { message, reason } where reason 'ended' records why capture stopped so the UI can explain it.
+ */
+function stopSystemAudio(arg) {
+  const { message, reason = null } = typeof arg === 'string' ? { message: arg } : (arg ?? {});
+  startGate.cancel(); // any start still in flight will release its stream and bow out
   const wasRunning = !!audio.systemStream;
-  audio.systemNode?.disconnect();
-  audio.systemStream?.getTracks().forEach((t) => t.stop());
+  safeDisconnect(audio.systemNode);
+  releaseStream(audio.systemStream);
   audio.systemStream = null;
   audio.systemNode = null;
+  audio.autoStarted = false;
   if (audio.kind === 'system') audio.kind = null;
+  if (wasRunning || reason) audio.stopReason = reason;
   const stopBtn = $('#system-audio-stop');
   const hadFocus = document.activeElement === stopBtn;
-  stopBtn.hidden = true;
-  $('#system-audio-start').hidden = false;
-  $('#dock-listen').setAttribute('aria-pressed', 'false');
+  setListenUi(false);
   if (hadFocus) $('#system-audio-start').focus();
   if (wasRunning) resetAnalysis();
   renderHelp();
   renderDetection();
-  if (message) setStatus(message);
+  if (reason) setStatus(recoveryHint(reason, { autoAudio: settings.autoAudio }), true);
+  else if (message) setStatus(message);
+}
+
+function reportStartError(err) {
+  if (err?.name === 'AbortError') return; // superseded by a newer start/stop: nothing to report
+  setStatus(err instanceof CaptureError ? err.message : describeMediaError(err, 'System audio capture'), true);
 }
 
 $('#system-audio-start').addEventListener('click', async () => {
@@ -773,45 +843,66 @@ $('#system-audio-start').addEventListener('click', async () => {
     $('#system-audio-stop').focus();
     setStatus('Listening to system audio. Play something in Spotify and the light will follow it.');
   } catch (err) {
-    stopSystemAudio();
-    setStatus(err instanceof CaptureError ? err.message : describeMediaError(err, 'System audio capture'), true);
+    reportStartError(err);
   }
 });
-$('#system-audio-stop').addEventListener('click', () => stopSystemAudio('System audio stopped. Nothing is being captured.'));
+$('#system-audio-stop').addEventListener('click', () => {
+  audio.stopReason = null;
+  stopSystemAudio('Stopped listening. Nothing is being captured.');
+});
 
+// ---------- Local audio file ----------
 $('#audio-file').addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
+  e.target.value = '';
   if (!file) return;
+  stopSystemAudio();
+  stopFile();
   try {
     const ctx = ensureAudioContext();
-    stopSystemAudio();
-    stopFile();
-    if (audioEl.src) URL.revokeObjectURL(audioEl.src);
-    audioEl.src = URL.createObjectURL(file);
+    audio.fileUrl = URL.createObjectURL(file);
+    audioEl.src = audio.fileUrl;
     audioEl.hidden = false;
     if (!audio.elementSource) audio.elementSource = ctx.createMediaElementSource(audioEl);
     audio.elementSource.connect(audio.analyser);
     audio.elementSource.connect(ctx.destination);
     audio.kind = 'file';
+    audio.stopReason = null;
     resetAnalysis();
-    await audioEl.play();
-    if (settings.motion !== 'music') update({ motion: 'music' });
     $('#audio-stop').hidden = false;
+    await audioEl.play();
+    if (audio.kind !== 'file') return; // stopped while starting
+    if (settings.motion !== 'music') update({ motion: 'music' });
     renderHelp();
+    renderDetection();
     setStatus(`Playing "${file.name}" from your computer. Music mode is on.`);
   } catch (err) {
+    stopFile(); // releases the object URL, node and UI state
     setStatus(describeMediaError(err, 'Audio playback'), true);
   }
-  e.target.value = '';
 });
 $('#audio-stop').addEventListener('click', () => {
   stopFile();
   setStatus('Audio file stopped.');
 });
+audioEl.addEventListener('ended', () => {
+  if (audio.kind === 'file') { stopFile(); setStatus('Finished playing the file.'); }
+});
+audioEl.addEventListener('error', () => {
+  if (audio.kind === 'file') { stopFile(); setStatus("That file can't be played. Try an MP3, AAC, WAV, OGG or FLAC file.", true); }
+});
 
+/** Stop file playback and release the element source connection, object URL and UI. */
 function stopFile() {
   if (!audioEl.paused) audioEl.pause();
-  audio.elementSource?.disconnect();
+  safeDisconnect(audio.elementSource); // the source node itself is reusable for the next file
+  if (audio.fileUrl) {
+    audioEl.removeAttribute('src');
+    audioEl.load();
+    URL.revokeObjectURL(audio.fileUrl);
+    audio.fileUrl = null;
+  }
+  audioEl.hidden = true;
   if (audio.kind === 'file') { audio.kind = null; resetAnalysis(); }
   const stopBtn = $('#audio-stop');
   if (document.activeElement === stopBtn) $('#system-audio-start').focus();
@@ -820,23 +911,43 @@ function stopFile() {
   renderDetection();
 }
 
+// ---------- Recovery after sleep, lock or audio device changes ----------
+navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+  if (audio.kind === 'system') setStatus(recoveryHint('devicechange'));
+});
+let wokeAt = 0;
+desktop?.onPower?.((evt) => {
+  if (evt !== 'resume' && evt !== 'unlock-screen') return;
+  wokeAt = performance.now();
+  // Windows may have ended the loopback track while the PC slept.
+  const track = audio.systemStream?.getAudioTracks()[0];
+  if (audio.kind === 'system' && track && track.readyState === 'ended') stopSystemAudio({ reason: 'ended' });
+});
+
 // ---------- Detection indicator ----------
 let lastDetectKey = '';
 function renderDetection() {
   const el = $('#audio-detect');
   let state, text;
-  if (!audio.kind) {
+  const auto = audio.kind === 'system' && audio.autoStarted ? 'Started automatically. ' : '';
+  if (!audio.kind && audio.stopReason) {
+    state = 'warn';
+    text = recoveryHint(audio.stopReason, { autoAudio: settings.autoAudio });
+  } else if (!audio.kind) {
     state = 'off';
     text = isPlaying() ? 'Press the waveform button below so the light follows the music.' : 'Not listening yet';
   } else if (signal.audible) {
     state = 'on';
-    text = audio.kind === 'system' ? 'Audio detected from system output: reacting' : 'Audio detected from file: reacting';
+    text = audio.kind === 'system' ? `${auto}Audio detected from system output: reacting` : 'Audio detected from file: reacting';
+  } else if (audio.kind === 'system' && isPlaying() && wokeAt && performance.now() - wokeAt < 60000) {
+    state = 'warn';
+    text = recoveryHint('silent-after-wake');
   } else {
     state = 'warn';
     text = audio.kind === 'system'
       ? (spotify.state === 'playing'
-        ? 'Listening, but no sound reaches the default output. Check Spotify\'s volume and output device.'
-        : 'Listening to system audio: silent. Press play in Spotify.')
+        ? `${auto}Listening, but no sound reaches the default output. Check Spotify's volume and output device.`
+        : `${auto}Listening to system audio: silent. Press play in Spotify.`)
       : 'File is paused or silent';
   }
   const key = `${state}|${text}`;
@@ -846,7 +957,7 @@ function renderDetection() {
   $('#np-hint').textContent = state === 'on' ? '' : text;
   const chip = $('#live-chip');
   chip.dataset.state = state;
-  chip.textContent = state === 'on' ? 'Reacting' : audio.kind ? 'Listening' : 'Idle';
+  chip.textContent = state === 'on' ? 'Reacting' : audio.kind ? (audio.autoStarted ? 'Listening (auto)' : 'Listening') : (audio.stopReason ? 'Stopped' : 'Idle');
 }
 
 // ---------- Analysis loop (timer-based so it keeps running while minimized) ----------
@@ -927,21 +1038,27 @@ syncControls();
 renderSpotify();
 loadLyrics();
 requestAnimationFrame(frame);
-window.addEventListener('pagehide', () => { stopScreen(); stopSystemAudio(); stopFile(); });
+window.addEventListener('pagehide', () => {
+  stopScreen();
+  stopSystemAudio();
+  stopFile();
+  try { audio.ctx?.close(); } catch { /* already closed */ }
+});
 
 if (desktop) {
   const ready = initDesktop();
   // Called by the main process (with a user gesture) once the window has loaded.
-  window.__glowlineAutoStart = async () => {
+  window.__glowlineAutoStart = async (reason = 'launch') => {
     await ready;
-    if (!settings.autoAudio || audio.kind) return 'skipped';
+    if (!settings.autoAudio || audio.kind || startGate.busy || demoMode) return 'skipped';
     try {
-      await startSystemAudio();
-      setStatus('Listening to system audio (auto-start is on). Use "Stop system audio" to stop.');
+      await startSystemAudio({ auto: true });
+      setStatus(reason === 'launch'
+        ? 'Started listening automatically ("Start listening when Glowline opens" is on). Press the waveform button to stop.'
+        : `Started listening again after ${reason === 'resume' ? 'waking up' : 'unlocking'} (auto-start is on).`);
       return 'started';
     } catch (err) {
-      stopSystemAudio();
-      setStatus(err instanceof CaptureError ? err.message : describeMediaError(err, 'System audio capture'), true);
+      reportStartError(err);
       return 'failed';
     }
   };

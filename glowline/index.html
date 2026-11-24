@@ -67,6 +67,15 @@
       <section class="lyrics" id="lyrics" aria-label="Lyrics">
         <div class="lyrics-track" id="lyrics-track"></div>
         <p class="lyrics-note" id="lyrics-note"></p>
+        <div class="lyrics-consent" id="lyrics-consent" role="group" aria-labelledby="lyrics-consent-title" hidden>
+          <p class="lyrics-consent-title" id="lyrics-consent-title">Show lyrics for this song?</p>
+          <p class="lyrics-consent-text" aria-live="polite">Glowline will send this song's <strong>title, artist, album and length</strong> to lrclib.net, a free lyrics service. Nothing else is sent, and the answer is saved on this PC.</p>
+          <div class="lyrics-consent-actions">
+            <button type="button" class="pill-btn primary-pill" id="lyrics-once">Look up this song</button>
+            <button type="button" class="pill-btn" id="lyrics-always">Always look up</button>
+            <button type="button" class="pill-btn" id="lyrics-never">Turn lyrics off</button>
+          </div>
+        </div>
         <p class="lyrics-credit">Lyrics from LRCLIB</p>
       </section>
 
@@ -205,10 +214,14 @@
             <span class="row-label">Start listening when Glowline opens</span>
             <input type="checkbox" class="switch" name="autoAudio" id="autoAudio" role="switch">
           </label>
-          <label class="row-line desktop-only">
-            <span class="row-label">Lyrics in full screen<br><span class="help">Looks up the song's title, artist and album on lrclib.net (free, no account). Results are cached on this PC.</span></span>
-            <input type="checkbox" class="switch" name="lyrics" id="lyrics-toggle" role="switch">
-          </label>
+          <div class="row-line desktop-only">
+            <label class="row-label" for="lyricsMode">Lyrics lookup<br><span class="help" id="lyrics-help">Full-screen lyrics come from lrclib.net, a free lyrics service. To find them, Glowline sends the song's <strong>title, artist, album and length</strong>. Nothing else, and never audio. Answers are cached on this PC. "Ask each time" asks before each new song; "Off" sends nothing.</span></label>
+            <select class="mini-select" id="lyricsMode" name="lyricsMode" aria-describedby="lyrics-help">
+              <option value="ask">Ask each time</option>
+              <option value="auto">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
           <div class="row-line">
             <span class="row-label">Play a local audio file instead</span>
             <span>

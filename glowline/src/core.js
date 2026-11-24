@@ -22,6 +22,8 @@ export const ENUMS = Object.freeze({
   colorMode: ['solid', 'gradient'],
   motion: ['still', 'animated', 'music'],
   theme: ['system', 'light', 'dark'],
+  // Lyrics lookup on lrclib.net: ask before each new song, always, or never.
+  lyricsMode: ['ask', 'auto', 'off'],
 });
 
 export const DEFAULTS = Object.freeze({
@@ -37,10 +39,10 @@ export const DEFAULTS = Object.freeze({
   overlay: false,
   autoAudio: false,
   albumColors: true,
-  lyrics: true,
+  lyricsMode: 'ask',
 });
 
-const BOOLEANS = ['overlay', 'autoAudio', 'albumColors', 'lyrics'];
+const BOOLEANS = ['overlay', 'autoAudio', 'albumColors'];
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -62,6 +64,11 @@ export function sanitizeSettings(input) {
   for (const [key, allowed] of Object.entries(ENUMS)) {
     if (allowed.includes(src[key])) out[key] = src[key];
   }
+  // Settings saved before lyricsMode existed had a boolean `lyrics` (on = look up automatically).
+  // Keep that choice: on → 'auto', off → 'off'. New installs start at 'ask'.
+  if (!ENUMS.lyricsMode.includes(src.lyricsMode) && typeof src.lyrics === 'boolean') {
+    out.lyricsMode = src.lyrics ? 'auto' : 'off';
+  }
   for (const key of BOOLEANS) {
     if (typeof src[key] === 'boolean') out[key] = src[key];
   }
@@ -70,6 +77,18 @@ export function sanitizeSettings(input) {
     if (typeof n === 'number' && Number.isFinite(n)) out[key] = Math.round(clamp(n, min, max));
   }
   return out;
+}
+
+/**
+ * What a lyrics lookup may do for the current song:
+ *  'skip'       – lyrics are off, do nothing
+ *  'network'    – look up on lrclib.net (mode 'auto', or the user approved this song)
+ *  'cache-only' – show lyrics already cached on this PC, otherwise ask first
+ */
+export function lyricsRequestPolicy(mode, approvedForThisSong = false) {
+  if (mode === 'off') return 'skip';
+  if (mode === 'auto' || approvedForThisSong) return 'network';
+  return 'cache-only';
 }
 
 /** Read settings from a Storage-like object. Never throws. */

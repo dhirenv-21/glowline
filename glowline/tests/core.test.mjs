@@ -215,3 +215,36 @@ test('HSV conversion round-trips and handles greys', async () => {
   assert.equal(hsvToHex({ h: 120, s: 1, v: 1 }), '#00ff00');
   assert.equal(hsvToHex({ h: 480, s: 1, v: 1 }), '#00ff00'); // hue wraps
 });
+
+test('lyricsMode: new installs ask first; older saved choices are preserved', async () => {
+  const { lyricsRequestPolicy } = await import('../src/core.js');
+  assert.equal(DEFAULTS.lyricsMode, 'ask');
+  assert.equal(sanitizeSettings(null).lyricsMode, 'ask');
+  // Settings saved before lyricsMode existed (boolean `lyrics`).
+  assert.equal(sanitizeSettings({ lyrics: true }).lyricsMode, 'auto', 'already enabled → keep automatic lookup');
+  assert.equal(sanitizeSettings({ lyrics: false }).lyricsMode, 'off');
+  assert.equal('lyrics' in sanitizeSettings({ lyrics: true }), false, 'legacy key is dropped after migration');
+  // An explicit new value always wins over the legacy flag; invalid values fall back.
+  assert.equal(sanitizeSettings({ lyrics: true, lyricsMode: 'ask' }).lyricsMode, 'ask');
+  assert.equal(sanitizeSettings({ lyricsMode: 'sometimes' }).lyricsMode, 'ask');
+  assert.equal(sanitizeSettings({ lyricsMode: 'sometimes', lyrics: false }).lyricsMode, 'off');
+
+  // Policy: nothing leaves the PC unless mode is 'auto' or the user approved this song.
+  assert.equal(lyricsRequestPolicy('off', true), 'skip');
+  assert.equal(lyricsRequestPolicy('auto'), 'network');
+  assert.equal(lyricsRequestPolicy('ask'), 'cache-only');
+  assert.equal(lyricsRequestPolicy('ask', true), 'network');
+});
+
+test('lyricsMode persists through storage, including the legacy migration', () => {
+  const store = memoryStorage();
+  assert.equal(saveSettings(store, { ...DEFAULTS, lyricsMode: 'off' }), true);
+  assert.equal(loadSettings(store).lyricsMode, 'off');
+  const legacy = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ ...DEFAULTS, lyricsMode: undefined, lyrics: true }) });
+  const migrated = loadSettings(legacy);
+  assert.equal(migrated.lyricsMode, 'auto');
+  saveSettings(legacy, migrated);
+  const stored = JSON.parse(legacy.getItem(STORAGE_KEY));
+  assert.equal(stored.lyricsMode, 'auto');
+  assert.equal('lyrics' in stored, false);
+});
