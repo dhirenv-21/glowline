@@ -15,7 +15,7 @@
     "start": "electron .",
     "selftest": "electron . --selftest",
     "web": "node server.mjs",
-    "test": "node --test tests/core.test.mjs tests/server.test.mjs tests/markup.test.mjs tests/spotify.test.mjs tests/media.test.mjs tests/lyrics.test.mjs tests/ipc-guard.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/server.test.mjs tests/markup.test.mjs tests/spotify.test.mjs tests/media.test.mjs tests/lyrics.test.mjs tests/ipc-guard.test.mjs tests/audio-lifecycle.test.mjs",
     "dist": "electron-builder --win nsis",
     "dist:dir": "electron-builder --win --dir",
     "build:media": "powershell -NoProfile -ExecutionPolicy Bypass -File electron/build-media-thumb.ps1",

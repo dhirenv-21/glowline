@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('glowlineDesktop', {
   onFrame: on('overlay:frame'),
   onOverlayState: on('overlay:state'),
   onShortcut: on('shortcut'),
+  onPower: on('power'),
   getSpotifyStatus: () => ipcRenderer.invoke('spotify:get'),
   onSpotifyStatus: on('spotify:status'),
   getMedia: () => ipcRenderer.invoke('media:get'),
