@@ -9,5 +9,6 @@
     "dist": "npm --prefix glowline run dist",
     "web": "npm --prefix glowline run web",
     "setup": "npm --prefix glowline install"
-  }
+  },
+  "license": "MIT"
 }

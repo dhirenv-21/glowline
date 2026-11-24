@@ -173,7 +173,7 @@ This project began as a browser prototype, written in a standalone folder becaus
 - Glowline is independent and inspired by publicly described *feature ideas* of commercial ambient-lighting apps. It uses no third-party branding, assets, copy or code. The name, presets, icon and design are original.
 - Runtime: [Electron](https://www.electronjs.org/) (MIT). Build tool: [electron-builder](https://www.electron.build/) (MIT). Both are dev dependencies; the packaged app bundles Electron and its Chromium/Node licenses (`LICENSE.electron.txt`, `LICENSES.chromium.html` in the install folder).
 - Spotify is a trademark of Spotify AB. Glowline isn't affiliated with or endorsed by Spotify and doesn't use Spotify's API.
-- `package.json` is `UNLICENSED` / `private` for personal use. Add a license if you plan to share it.
+- Glowline is released under the [MIT License](../LICENSE). Copyright (c) 2026 Dhiren Vasudeva.
 
 ## Settings panel
 
