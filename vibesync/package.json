@@ -1,0 +1,68 @@
+{
+  "name": "vibesync",
+  "productName": "VibeSync",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Ambient light for your Windows screen that pulses with Spotify: beat-reactive GPU glow, album-art colors, cover art and full-screen synced lyrics.",
+  "author": "Dhiren Vasudeva",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --selftest",
+    "web": "node server.mjs",
+    "test": "node --test tests/core.test.mjs tests/server.test.mjs tests/markup.test.mjs tests/spotify.test.mjs tests/media.test.mjs tests/lyrics.test.mjs tests/ipc-guard.test.mjs tests/audio-lifecycle.test.mjs tests/profile-migration.test.mjs",
+    "dist": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --win --dir",
+    "build:media": "powershell -NoProfile -ExecutionPolicy Bypass -File electron/build-media-thumb.ps1",
+    "demo": "electron . --demo",
+    "screenshots": "electron . --screenshots=../docs/screenshots"
+  },
+  "build": {
+    "appId": "local.glowline.app",
+    "productName": "VibeSync",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "overlay.html",
+      "styles.css",
+      "overlay.css",
+      "src/**",
+      "electron/**",
+      "package.json",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "shortcutName": "VibeSync"
+    },
+    "asarUnpack": [
+      "electron/media-helper.ps1",
+      "electron/VibeSyncMediaThumb.dll"
+    ],
+    "artifactName": "VibeSync-Setup-${version}.${ext}"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.0.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhirenv-21/vibesync.git"
+  },
+  "homepage": "https://github.com/dhirenv-21/vibesync"
+}

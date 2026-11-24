@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self'; script-src 'self'">
+  <title>VibeSync</title>
+  <link rel="icon" href="build/icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#play">Skip to player</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <defs><linearGradient id="brand-beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7c6cff"/><stop offset=".5" stop-color="#ff4fa0"/><stop offset="1" stop-color="#00d6be"/></linearGradient></defs>
+        <rect x="3.5" y="7" width="25" height="18" rx="4.5" fill="none" stroke="url(#brand-beam)" stroke-width="2.6"/>
+        <polyline points="6.5,16 11,16 12.6,13.4 14.4,19.4 16.4,10.4 18.4,21.4 20.2,14.2 21.4,16 25.5,16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>VibeSync</span>
+    </div>
+    <div class="topbar-actions">
+      <span class="live-chip" id="live-chip">Idle</span>
+      <button type="button" id="theme-toggle" class="icon-btn" aria-label="Theme: system">
+        <span aria-hidden="true" id="theme-icon">◐</span>
+        <span id="theme-label" class="icon-btn-label">System</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="player-wrap">
+    <h1 class="visually-hidden">VibeSync player</h1>
+
+    <!-- The whole player is the live preview: its edge glows exactly like your screen will. -->
+    <section class="stage" id="stage" aria-label="Now playing and live glow preview">
+      <div class="backdrop" aria-hidden="true"><img id="bg-art" alt=""><img id="bg-art-2" class="drift-2" alt=""></div>
+      <div class="rim rim-glow" aria-hidden="true"><div class="rim ring"></div></div>
+
+      <div class="player">
+        <div class="cover" id="cover-wrap">
+          <img id="cover" alt="">
+          <div class="cover-empty" id="cover-empty" aria-hidden="true">
+            <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18"/><circle cx="24" cy="24" r="5"/></svg>
+          </div>
+        </div>
+        <div class="meta">
+          <p class="np-title" id="np-title">Nothing playing</p>
+          <p class="np-sub" id="np-sub">Open Spotify and press play</p>
+        </div>
+        <div class="progress" aria-hidden="true">
+          <span id="pos">0:00</span>
+          <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+          <span id="dur">0:00</span>
+        </div>
+        <div class="transport" role="group" aria-label="Spotify playback">
+          <button type="button" class="round-btn" id="prev" aria-label="Previous track">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14M19 5 9 12l10 7z"/></svg>
+          </button>
+          <button type="button" class="round-btn big" id="play" aria-label="Play">
+            <svg viewBox="0 0 24 24" aria-hidden="true" id="play-icon"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button type="button" class="round-btn" id="next" aria-label="Next track">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 5v14M5 5l10 7-10 7z"/></svg>
+          </button>
+        </div>
+        <p class="np-hint" id="np-hint"></p>
+      </div>
+
+      <section class="lyrics" id="lyrics" aria-label="Lyrics">
+        <div class="lyrics-track" id="lyrics-track"></div>
+        <p class="lyrics-note" id="lyrics-note"></p>
+        <div class="lyrics-consent" id="lyrics-consent" role="group" aria-labelledby="lyrics-consent-title" hidden>
+          <p class="lyrics-consent-title" id="lyrics-consent-title">Show lyrics for this song?</p>
+          <p class="lyrics-consent-text" aria-live="polite">VibeSync will send this song's <strong>title, artist, album and length</strong> to lrclib.net, a free lyrics service. Nothing else is sent, and the answer is saved on this PC.</p>
+          <div class="lyrics-consent-actions">
+            <button type="button" class="pill-btn primary-pill" id="lyrics-once">Look up this song</button>
+            <button type="button" class="pill-btn" id="lyrics-always">Always look up</button>
+            <button type="button" class="pill-btn" id="lyrics-never">Turn lyrics off</button>
+          </div>
+        </div>
+        <p class="lyrics-credit">Lyrics from LRCLIB</p>
+      </section>
+
+      <p class="mock-caption" id="mock-caption">Animated · 2 colors</p>
+      <div class="rim ring rim-band" aria-hidden="true"></div>
+      <canvas class="glow-canvas" id="glow-canvas" aria-hidden="true"></canvas>
+
+      <nav class="dock" aria-label="Quick controls">
+        <button type="button" class="dock-btn" id="dock-listen" aria-pressed="false" title="Listen to Spotify / system audio">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8v4M7 5v10M11 3v14M15 6v8"/></svg>
+          <span class="visually-hidden">Listen to Spotify / system audio</span>
+        </button>
+        <button type="button" class="dock-btn" id="dock-glow" aria-pressed="false" title="Glow around my screen (Ctrl+Alt+G)">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 14h6M8 17h4M10 2a5 5 0 0 0-3 9c.6.5 1 1.2 1 2h4c0-.8.4-1.5 1-2a5 5 0 0 0-3-9z"/></svg>
+          <span class="visually-hidden">Glow around my screen</span>
+        </button>
+        <button type="button" class="dock-btn" id="dock-colors" title="Colors">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 1 0 0 16c1 0 1.5-.7 1.5-1.4 0-.9-.8-1.3-.8-2.1 0-.8.7-1.5 1.6-1.5H14a4 4 0 0 0 4-4c0-3.9-3.6-7-8-7z"/><circle cx="6" cy="9" r="1"/><circle cx="9" cy="5.5" r="1"/><circle cx="13" cy="6" r="1"/></svg>
+          <span class="visually-hidden">Colors</span>
+        </button>
+        <button type="button" class="dock-btn wide" id="dock-settings" aria-expanded="false" aria-controls="sheet">Settings</button>
+        <button type="button" class="dock-btn" id="fullscreen-btn" title="Full-screen preview">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8V3h5M17 8V3h-5M3 12v5h5M17 12v5h-5"/></svg>
+          <span class="visually-hidden">Full-screen preview</span>
+        </button>
+      </nav>
+
+      <button type="button" class="pill-btn exit-fs" id="exit-fs">Exit full screen <kbd>Esc</kbd></button>
+      <p class="status toast" id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- ============ Settings sheet ============ -->
+    <aside class="sheet" id="sheet" aria-label="Settings" hidden>
+      <div class="sheet-head">
+        <span class="card-title">Settings</span>
+        <button type="button" class="icon-btn small" id="sheet-close" aria-label="Close settings">✕</button>
+      </div>
+      <form class="panel" id="controls" aria-label="Lighting controls" novalidate>
+
+        <section class="sect" aria-labelledby="music-h">
+          <h2 class="sect-h" id="music-h">Music</h2>
+          <p class="pill" id="spotify-status"><span class="dot" aria-hidden="true"></span><span id="spotify-text">Spotify: checking…</span></p>
+          <div class="listen-row">
+            <button type="button" class="big-btn" id="system-audio-start">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8v4M7 5v10M11 3v14M15 6v8"/></svg>
+              Listen to Spotify / system audio
+            </button>
+            <button type="button" class="big-btn stop" id="system-audio-stop" hidden>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="2"/></svg>
+              Stop listening
+            </button>
+          </div>
+          <p class="pill" id="audio-detect"><span class="dot" aria-hidden="true"></span><span id="audio-detect-text">Not listening yet</span></p>
+          <div class="meter" aria-hidden="true"><div class="meter-fill" id="meter-fill"></div></div>
+          <p class="help" id="system-audio-help">Hears whatever your speakers or headphones play (Windows audio loopback). Analysed on this PC only, never recorded or uploaded. The microphone is never used.</p>
+        </section>
+
+        <section class="sect" id="overlay-group" aria-labelledby="overlay-h" hidden>
+          <h2 class="sect-h" id="overlay-h">Screen glow</h2>
+          <label class="row-line">
+            <span class="row-label">Glow around my screen</span>
+            <input type="checkbox" class="switch" name="overlay" id="overlay" role="switch">
+          </label>
+          <p class="sub-label">Display</p>
+          <div id="overlay-displays" class="display-list" role="group" aria-label="Displays to light"></div>
+          <p class="help" id="overlay-help">Click-through and always on top. Toggle anywhere with <kbd id="overlay-shortcut">Ctrl+Alt+G</kbd>.</p>
+        </section>
+
+        <section class="sect" aria-labelledby="light-h">
+          <h2 class="sect-h" id="light-h">Light</h2>
+          <div class="row-line">
+            <label class="row-label" for="colorMode">Gradient</label>
+            <select class="mini-select" id="colorMode" name="colorMode">
+              <option value="solid">1 color</option>
+              <option value="gradient">2 colors</option>
+            </select>
+          </div>
+          <div class="row-line">
+            <label class="row-label" for="motion">Animation</label>
+            <select class="mini-select" id="motion" name="motion">
+              <option value="still">Still</option>
+              <option value="animated">Animated</option>
+              <option value="music">Music sync</option>
+            </select>
+          </div>
+          <p class="help" id="motion-help"></p>
+          <div class="slider">
+            <label for="thickness">Thickness</label><output for="thickness" id="thickness-out"></output>
+            <input type="range" id="thickness" name="thickness" min="1" max="80" step="1">
+          </div>
+          <div class="slider">
+            <label for="glow">Glow</label><output for="glow" id="glow-out"></output>
+            <input type="range" id="glow" name="glow" min="0" max="100" step="1">
+          </div>
+          <div class="slider" id="speed-field">
+            <label for="speed">Speed</label><output for="speed" id="speed-out"></output>
+            <input type="range" id="speed" name="speed" min="0" max="100" step="1">
+          </div>
+        </section>
+
+        <section class="sect" id="colors-sect" aria-labelledby="colors-h">
+          <h2 class="sect-h" id="colors-h">Colors</h2>
+          <label class="row-line">
+            <span class="row-label">Match album art</span>
+            <input type="checkbox" class="switch" name="albumColors" id="albumColors" role="switch">
+          </label>
+          <div class="chips" id="presets" role="group" aria-label="Preset palettes"></div>
+          <div class="wheels">
+            <div class="wheel-col">
+              <p class="wheel-h">Primary <span class="pct" id="primary-pct">60%</span></p>
+              <div class="wheel" id="wheel-primary" data-target="primary"></div>
+              <label class="hex-chip"><input type="color" name="primary" id="primary"><span id="primary-hex">#000000</span><span class="visually-hidden"> Primary color</span></label>
+            </div>
+            <div class="wheel-col" id="secondary-field">
+              <p class="wheel-h">Secondary <span class="pct" id="secondary-pct">40%</span></p>
+              <div class="wheel" id="wheel-secondary" data-target="secondary"></div>
+              <label class="hex-chip"><input type="color" name="secondary" id="secondary"><span id="secondary-hex">#000000</span><span class="visually-hidden"> Secondary color</span></label>
+            </div>
+          </div>
+          <div class="slider" id="balance-field">
+            <label for="balance">Mix</label><output for="balance" id="balance-out"></output>
+            <input type="range" id="balance" name="balance" min="10" max="90" step="1">
+          </div>
+          <div class="row-line">
+            <span class="row-label" id="match-label">Match colors to my screen</span>
+            <span>
+              <button type="button" class="mini-btn" id="screen-start" aria-describedby="match-label">Start</button>
+              <button type="button" class="mini-btn stop" id="screen-stop" hidden>Stop</button>
+            </span>
+          </div>
+        </section>
+
+        <details class="sect more">
+          <summary class="sect-h">More</summary>
+          <label class="row-line desktop-only">
+            <span class="row-label">Start listening when VibeSync opens</span>
+            <input type="checkbox" class="switch" name="autoAudio" id="autoAudio" role="switch">
+          </label>
+          <div class="row-line desktop-only">
+            <label class="row-label" for="lyricsMode">Lyrics lookup<br><span class="help" id="lyrics-help">Full-screen lyrics come from lrclib.net, a free lyrics service. To find them, VibeSync sends the song's <strong>title, artist, album and length</strong>. Nothing else, and never audio. Answers are cached on this PC. "Ask each time" asks before each new song; "Off" sends nothing.</span></label>
+            <select class="mini-select" id="lyricsMode" name="lyricsMode" aria-describedby="lyrics-help">
+              <option value="ask">Ask each time</option>
+              <option value="auto">Always</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+          <div class="row-line">
+            <span class="row-label">Play a local audio file instead</span>
+            <span>
+              <label class="mini-btn file-btn">
+                <input type="file" id="audio-file" accept="audio/*" class="visually-hidden">
+                <span>Choose…</span>
+              </label>
+              <button type="button" class="mini-btn stop" id="audio-stop" hidden>Stop</button>
+            </span>
+          </div>
+          <audio id="audio-el" controls hidden></audio>
+          <div class="row-line">
+            <span class="row-label">Reset look to defaults</span>
+            <button type="button" class="mini-btn" id="reset">Reset</button>
+          </div>
+          <div class="display-picker web-only">
+            <label for="display-select">Full-screen display</label>
+            <select id="display-select" aria-describedby="display-help">
+              <option value="current">This browser window's display</option>
+            </select>
+            <button type="button" class="mini-btn" id="detect-displays">Detect displays</button>
+            <p class="help" id="display-help">Detecting other displays needs a Chromium browser and your permission.</p>
+          </div>
+          <div class="limits">
+            <p class="sub-label">What VibeSync can and can't do</p>
+            <ul class="desktop-only">
+              <li>System audio is everything your default output device plays. VibeSync can tell whether Spotify is playing, but it can't separate Spotify's sound from other apps.</li>
+              <li>Cover art, track info and the play/next/previous buttons come from Windows' media controls (the same source as the volume flyout). No Spotify API or account is used.</li>
+              <li>The glow covers the displays you tick. It doesn't change monitor brightness or hardware settings, and it can't draw over exclusive-fullscreen games, the lock screen or secure Windows prompts.</li>
+            </ul>
+            <ul class="web-only">
+              <li>In a browser tab the light only appears inside this page or its full-screen preview. Install the desktop app for cover art, playback controls, the screen glow and Spotify detection.</li>
+              <li>In Chrome or Edge on Windows, "Listen" asks you to share a screen. Tick "Also share system audio" in that dialog.</li>
+              <li>Screen and audio capture always need your explicit, visible permission, and you can stop them at any time.</li>
+            </ul>
+          </div>
+        </details>
+      </form>
+    </aside>
+  </main>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

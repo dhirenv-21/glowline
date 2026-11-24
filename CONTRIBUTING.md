@@ -1,12 +1,12 @@
-# Contributing to Glowline
+# Contributing to VibeSync
 
 Thanks for your interest! Bug reports, ideas and pull requests are all welcome.
 
 ## Reporting a bug
 
-Open an [issue](https://github.com/dhirenv-21/glowline/issues/new/choose) using the bug template and include:
+Open an [issue](https://github.com/dhirenv-21/vibesync/issues/new/choose) using the bug template and include:
 
-- your Windows version and Glowline version,
+- your Windows version and VibeSync version,
 - what you expected and what happened,
 - the output of `npm run selftest` if it's about audio, cover art or performance (it prints a `SELFTEST {...}` line with detection and frame-timing data).
 
@@ -15,8 +15,8 @@ Please don't paste anything personal (file paths with your name, account details
 ## Development setup
 
 ```bash
-git clone https://github.com/dhirenv-21/glowline.git
-cd glowline/glowline
+git clone https://github.com/dhirenv-21/vibesync.git
+cd vibesync/vibesync
 npm install
 npm start        # run from source
 npm run demo     # run with a demo track (no Spotify needed)
@@ -27,7 +27,7 @@ npm test         # unit tests
 
 1. Fork the repo and create a branch from `main`.
 2. Keep changes focused; one feature or fix per PR.
-3. Add or update tests in `glowline/tests/` for logic changes (they use `node:test` and must not need the network or audio hardware).
+3. Add or update tests in `vibesync/tests/` for logic changes (they use `node:test` and must not need the network or audio hardware).
 4. Run `npm test` and make sure it passes.
 5. If you change the UI, check keyboard access and the *reduce animations* setting, and include a before/after screenshot.
 
