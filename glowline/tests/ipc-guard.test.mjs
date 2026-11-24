@@ -89,8 +89,11 @@ test('main process: every preload channel goes through the sender-checked wrappe
   }
   // Only the two wrappers may call ipcMain directly.
   assert.equal([...main.matchAll(/ipcMain\.(handle|on)\(/g)].length, 2);
-  assert.match(main, /if \(!isTrustedSender\(event\)\)/);
-  assert.match(main, /frame\.parent\) return false/);
+  // Both wrappers check the sender before running anything.
+  assert.equal([...main.matchAll(/const why = untrustedReason\(event\);\s+if \(why\)/g)].length, 2);
+  assert.match(main, /if \(frame\.parent\) return 'sub-frame'/);
+  assert.match(main, /if \(!isControlContents\(event\.sender\)\) return/);
+  assert.match(main, /if \(!guard\.isAppPageUrl\(frame\.url, ROOT, \['index\.html'\]\)\) return/);
   // Existing protections stay in place.
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /sandbox: true/);
