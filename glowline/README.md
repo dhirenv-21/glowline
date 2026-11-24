@@ -87,7 +87,7 @@ The two colors **flow around the screen** with slow organic noise ("light leakin
 
 ## Full-screen lyrics
 
-Press the **full-screen** button (corners icon). The player becomes a full-screen lyrics view: cover, title and progress on the left, and **time-synced lyrics** on the right. The current line is bright with a glow in the album's color, the next lines are dimmed, earlier lines fade, and it scrolls smoothly in time with the song. Move the mouse to show the controls; they and the pointer hide after 2.5 s. **Esc** exits.
+Press the **full-screen** button (corners icon). The player becomes a full-screen lyrics view: cover, title and progress on the left, and **time-synced lyrics** on the right, over a slowly drifting, blurred version of the cover. The current line lights up **word by word** (karaoke-style, timed by word length within the line) with a glow in the album's color. Nearby lines fade with distance, and the list glides to each new line with spring easing. Instrumental breaks show three dots that fill in over the break and pulse on the beat. Move the mouse to show the controls; they and the pointer hide after 2.5 s. **Esc** exits.
 
 - Lyrics come from **LRCLIB** (lrclib.net), a free, open lyrics database. No account or key. For each new track Glowline sends **only the title, artist, album and length** (never audio, never anything about you) and caches the answer in `%APPDATA%\glowline\lyrics-cache`, so each song is looked up once. "Not found" is retried after a day.
 - Songs with only plain (unsynced) lyrics scroll gently with the song's progress. Instrumentals say so.
@@ -110,6 +110,10 @@ If step 2 shows "playing" but the audio indicator stays amber, see Troubleshooti
 - **Spotify detection (fallback):** every 2.5 s Glowline also runs Windows' built-in `tasklist` to read Spotify's window title. Spotify shows "Spotify Premium" / "Spotify Free" when idle and "Artist - Track" while playing. This is local, needs no account, and reads nothing else.
 - **Overlay:** a frameless, transparent window per selected display, `alwaysOnTop` at the `screen-saver` level, click-through (`setIgnoreMouseEvents`), hidden from the taskbar and from screen capture (`setContentProtection`), so screen-color sampling never picks up the glow itself.
 - **Permissions:** the app denies microphone/camera (`media`) permission outright, and allows `display-capture` only right after one of its own buttons declares what the capture is for.
+
+## Performance
+
+The glow shader skips every pixel the light can't reach and only evaluates the screen sides near each pixel. Nothing over the animated light uses live backdrop blur, the album backdrop is blurred once per track on a tiny canvas, and progress and lyrics only touch the page when something changes. Audio values (sent about 30 times a second) are smoothed every frame, so the light glides instead of stepping. On the test laptop this took the window from ~90 fps with 120–140 ms hitches to ~155–170 fps with no hitches over 33 ms. `npm run selftest` prints `perf` (fps, 95th-percentile and worst frame time) to check yours.
 
 ## Features kept from the browser version
 

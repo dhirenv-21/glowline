@@ -53,7 +53,7 @@ function querySpotify() {
 }
 
 /** Poll Spotify's state and call onChange only when it changes. Returns a stop function. */
-function watchSpotify(onChange, intervalMs = 2500) {
+function watchSpotify(onChange, intervalMs = 5000) {
   let last = '';
   let stopped = false;
   let timer = null;

@@ -330,10 +330,30 @@ function fmtTime(sec) {
 
 function setArt(url) {
   currentArt = url || null;
-  if (currentArt) { coverImg.src = currentArt; bgArt.src = currentArt; }
-  else { coverImg.removeAttribute('src'); bgArt.removeAttribute('src'); }
+  if (currentArt) { coverImg.src = currentArt; setBackdrop(currentArt); }
+  else { coverImg.removeAttribute('src'); bgArt.removeAttribute('src'); bgArt2.removeAttribute('src'); }
   coverWrap.classList.toggle('has-art', !!currentArt);
   if (settings.albumColors) applyAlbumPalette();
+}
+
+const bgArt2 = $('#bg-art-2');
+function setBackdrop(url) {
+  const img = new Image();
+  img.onload = () => {
+    // Shrink, then blur + saturate once on a small canvas; the page just scales the result.
+    const tiny = document.createElement('canvas');
+    tiny.width = 24; tiny.height = 24;
+    tiny.getContext('2d').drawImage(img, 0, 0, 24, 24);
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.filter = 'blur(14px) saturate(1.6)';
+    ctx.drawImage(tiny, -24, -24, 304, 304);
+    const out = c.toDataURL('image/jpeg', 0.85);
+    bgArt.src = out;
+    bgArt2.src = out;
+  };
+  img.src = url;
 }
 
 function applyAlbumPalette() {
@@ -382,17 +402,18 @@ function currentPosition() {
   return Math.min(media.duration || Infinity, media.position + elapsed);
 }
 
+const barFill = $('#bar-fill');
+const posEl = $('#pos');
+const durEl = $('#dur');
+let lastProgressText = '';
 function renderProgress() {
-  if (!media.session || !media.duration) {
-    $('#bar-fill').style.width = '0%';
-    $('#pos').textContent = '0:00';
-    $('#dur').textContent = '0:00';
-    return;
-  }
-  const pos = currentPosition();
-  $('#bar-fill').style.width = `${(pos / media.duration) * 100}%`;
-  $('#pos').textContent = fmtTime(pos);
-  $('#dur').textContent = fmtTime(media.duration);
+  const has = media.session && media.duration;
+  const pos = has ? currentPosition() : 0;
+  barFill.style.transform = `scaleX(${has ? Math.min(1, pos / media.duration).toFixed(4) : 0})`;
+  const text = has ? `${fmtTime(pos)}|${fmtTime(media.duration)}` : '0:00|0:00';
+  if (text === lastProgressText) return;   // DOM text changes at most once a second
+  lastProgressText = text;
+  [posEl.textContent, durEl.textContent] = text.split('|');
 }
 
 function onMedia(msg) {
@@ -426,7 +447,7 @@ for (const [id, cmd] of [['play', 'play-pause'], ['prev', 'previous'], ['next', 
 const lyricsBox = $('#lyrics');
 const lyricsTrack = $('#lyrics-track');
 const lyricsNote = $('#lyrics-note');
-const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1 };
+const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1, y: 0, target: 0, words: null, sung: -1 };
 
 function lyricsKey() { return media.session && media.title ? `${media.artist}|${media.title}` : null; }
 
@@ -435,13 +456,24 @@ function showLyrics(res) {
   lyr.lines = res.status === 'synced' ? res.lines : [];
   lyr.active = -2;
   lyr.plainOffset = -1;
-  lyricsTrack.style.transform = 'translateY(0)';
+  lyr.y = 0;
+  lyr.target = 0;
+  lyr.words = null;
+  lyr.sung = -1;
+  lyricsTrack.style.transform = 'translate3d(0,0,0)';
   lyricsTrack.replaceChildren();
   if (res.status === 'synced') {
     lyr.els = lyr.lines.map((line) => {
       const p = document.createElement('p');
-      p.className = line.text ? 'lyric-line' : 'lyric-line gap';
-      p.textContent = line.text || '• • •';
+      if (line.text && !/^[\s♪♫🎵🎶~.…-]*$/u.test(line.text)) {   // "♪" lines are instrumental gaps
+        p.className = 'lyric-line';
+        p.textContent = line.text;
+      } else {
+        p.className = 'lyric-line gap';
+        p.setAttribute('aria-label', 'Instrumental');
+        for (let i = 0; i < 3; i++) p.append(document.createElement('i'));
+      }
+      p.style.setProperty('--dist', '6');
       lyricsTrack.append(p);
       return p;
     });
@@ -479,29 +511,86 @@ async function loadLyrics({ force = false } = {}) {
   showLyrics(res ?? { status: 'error' });
 }
 
-function renderLyrics() {
+/** Split the active line into word spans with estimated timing (by word length). */
+function activateWords(el, start, end) {
+  const words = el.textContent.split(/(\s+)/);
+  el.textContent = '';
+  const spans = [];
+  let total = 0;
+  for (const w of words) {
+    if (/^\s+$/.test(w)) { el.append(w); continue; }
+    const span = document.createElement('span');
+    span.className = 'w';
+    span.textContent = w;
+    el.append(span);
+    spans.push({ span, before: total });
+    total += w.length + 2;   // longer words take longer to sing
+  }
+  // Words are sung over ~85% of the line; the rest is breath before the next line.
+  const dur = Math.max(0.6, Math.min(end - start, 12)) * 0.85;
+  return spans.map(({ span, before }) => ({ span, t: start + (before / Math.max(total, 1)) * dur }));
+}
+
+let lastLyricsTime = performance.now();
+function renderLyrics(now) {
+  const dt = Math.min(0.1, (now - lastLyricsTime) / 1000);
+  lastLyricsTime = now;
   if (document.fullscreenElement !== stage || lyr.els.length === 0) return;
-  const pos = currentPosition();
+  const pos = currentPosition() + 0.2;   // light each line a touch early so it lands on the sung word
   const view = lyricsBox.clientHeight;
+
   if (lyr.status === 'synced') {
-    // Show a line ~0.25 s early so the highlight lands on the sung word, not after it.
-    const idx = activeLineIndex(lyr.lines, pos + 0.25);
-    if (idx === lyr.active) return;
-    lyr.active = idx;
-    lyr.els.forEach((el, i) => {
-      el.classList.toggle('active', i === idx);
-      el.classList.toggle('past', i < idx);
-      el.classList.toggle('near', i > idx && i <= idx + 2);
-    });
-    const anchor = lyr.els[Math.max(0, idx)];
-    const offset = anchor.offsetTop + anchor.offsetHeight / 2 - view * 0.38;
-    lyricsTrack.style.transform = `translateY(${-Math.max(0, idx < 0 ? 0 : offset)}px)`;
+    const idx = activeLineIndex(lyr.lines, pos);
+    if (idx !== lyr.active) {
+      const prev = lyr.els[lyr.active];
+      if (prev && !prev.classList.contains('gap')) prev.textContent = lyr.lines[lyr.active].text; // drop word spans
+      lyr.active = idx;
+      const lo = Math.max(0, idx - 8), hi = Math.min(lyr.els.length - 1, idx + 8);
+      lyr.els.forEach((el, i) => {
+        if (i < lo - 1 || i > hi + 1) return;
+        el.classList.toggle('active', i === idx);
+        el.classList.toggle('past', i < idx);
+        el.style.setProperty('--dist', String(Math.min(6, Math.abs(i - idx))));
+      });
+      const cur = lyr.els[idx];
+      lyr.words = null;
+      lyr.sung = -1;
+      if (cur && !cur.classList.contains('gap')) {
+        const end = lyr.lines[idx + 1]?.t ?? lyr.lines[idx].t + 5;
+        lyr.words = activateWords(cur, lyr.lines[idx].t, end);
+      }
+      const anchor = cur ?? lyr.els[0];
+      lyr.target = idx < 0 ? 0 : Math.max(0, anchor.offsetTop + anchor.offsetHeight / 2 - view * 0.36);
+    }
+    // Karaoke: light words as they're sung.
+    if (lyr.words) {
+      let n = 0;
+      while (n < lyr.words.length && pos >= lyr.words[n].t) n++;
+      if (n !== lyr.sung) {
+        for (let i = Math.max(0, lyr.sung); i < lyr.words.length; i++) lyr.words[i].span.classList.toggle('sung', i < n);
+        if (n < lyr.sung) lyr.words.forEach((w, i) => w.span.classList.toggle('sung', i < n));
+        lyr.sung = n;
+      }
+    }
+    // Instrumental gap: three dots fill in over the gap and breathe with the beat.
+    const cur = lyr.els[lyr.active];
+    if (cur && cur.classList.contains('gap')) {
+      const start = lyr.lines[lyr.active].t;
+      const end = lyr.lines[lyr.active + 1]?.t ?? start + 8;
+      cur.style.setProperty('--gp', Math.max(0, Math.min(1, (pos - start) / Math.max(0.5, end - start))).toFixed(3));
+      cur.style.setProperty('--beat', signal.beat.toFixed(2));
+    }
   } else if (lyr.status === 'plain' && media.duration) {
     const max = Math.max(0, lyricsTrack.scrollHeight - view * 0.6);
-    const offset = Math.round(Math.min(1, pos / media.duration) * max);
-    if (Math.abs(offset - lyr.plainOffset) < 2) return;
-    lyr.plainOffset = offset;
-    lyricsTrack.style.transform = `translateY(${-offset}px)`;
+    lyr.target = Math.round(Math.min(1, pos / media.duration) * max);
+  }
+
+  // Spring-style easing toward the target line (smooth, interruptible, frame-rate independent).
+  const k = reducedMotion ? 1 : 1 - Math.exp(-dt / 0.16);
+  const nextY = lyr.y + (lyr.target - lyr.y) * k;
+  if (Math.abs(nextY - lyr.y) > 0.05 || Math.abs(lyr.target - lyr.y) > 0.05) {
+    lyr.y = Math.abs(lyr.target - nextY) < 0.3 ? lyr.target : nextY;
+    lyricsTrack.style.transform = `translate3d(0, ${(-lyr.y).toFixed(1)}px, 0)`;
   }
 }
 
@@ -820,10 +909,17 @@ function analyse() {
 setInterval(analyse, 33);
 
 // ---------- Preview render loop ----------
-const glow = createGlowRenderer($('#glow-canvas'), { radius: 20, maxScale: 1.5 });
+const glow = createGlowRenderer($('#glow-canvas'), { radius: 20, maxScale: 1.25 });
+let lastCoverPulse = 0;
 stage.classList.toggle('gl-on', !!glow);
 
+// Frame timing, used by the self-test to measure smoothness.
+const perf = { times: [], longTasks: 0 };
+try { new PerformanceObserver((l) => { perf.longTasks += l.getEntries().length; }).observe({ type: 'longtask', buffered: false }); } catch { /* unsupported */ }
+
 function frame(now) {
+  perf.times.push(now);
+  if (perf.times.length > 2000) perf.times.shift();
   if (glow) {
     glow.render(settings, { time: now, level: signal.level, beat: signal.beat, reducedMotion });
   } else {
@@ -833,11 +929,11 @@ function frame(now) {
     stage.style.setProperty('--blur', `${st.blur}px`);
     stage.style.setProperty('--intensity', String(st.intensity));
   }
-  renderLyrics();
+  renderLyrics(now);
   meterFill.style.width = `${Math.round(signal.level * 100)}%`;
   renderProgress();
-  if (!reducedMotion && audio.kind && signal.beat > 0) coverWrap.style.transform = `scale(${1 + signal.beat * 0.025})`;
-  else coverWrap.style.transform = '';
+  const pulse = !reducedMotion && audio.kind ? Math.round(signal.beat * 40) / 40 : 0;
+  if (pulse !== lastCoverPulse) { lastCoverPulse = pulse; coverWrap.style.transform = pulse ? `scale(${1 + pulse * 0.022})` : ''; }
   requestAnimationFrame(frame);
 }
 
@@ -872,6 +968,7 @@ if (desktop) {
     try {
       report.trackLabel = await startSystemAudio();
       const t0 = performance.now();
+      perf.times.length = 0; perf.longTasks = 0;
       let peakRms = 0, audibleTicks = 0, ticks = 0, beats = 0, lastPulse = 0, peakLevel = 0, bassSum = 0, peakBass = 0;
       await new Promise((resolve) => {
         const id = setInterval(() => {
@@ -895,6 +992,12 @@ if (desktop) {
         bassPeak: Number(peakBass.toFixed(3)),
         detectionText: $('#audio-detect-text').textContent,
         spotifyText: $('#spotify-text').textContent,
+        perf: (() => {
+          const d = perf.times.slice(1).map((t, i) => t - perf.times[i]).sort((x, y) => x - y);
+          if (!d.length) return null;
+          const avg = d.reduce((x, y) => x + y, 0) / d.length;
+          return { fps: Math.round(1000 / avg), p95ms: Math.round(d[Math.floor(d.length * 0.95)]), worstMs: Math.round(d[d.length - 1]), jank: d.filter((x) => x > 33).length, longTasks: perf.longTasks };
+        })(),
         nowPlaying: `${$('#np-title').textContent} / ${$('#np-sub').textContent}`,
         coverArt: $('#cover-wrap').classList.contains('has-art'),
         colors: [settings.primary, settings.secondary, settings.albumColors ? 'from album art' : 'manual'],

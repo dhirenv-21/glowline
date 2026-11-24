@@ -50,6 +50,8 @@ void main() {
   float sd = sdRoundBox(px - c, c, uRadius);
   if (sd > 0.5) { gl_FragColor = vec4(0.0); return; }
   float d = max(0.0, -sd);
+  float reachMax = max(uAmb * 2.6, uBloom * 7.0) * (1.0 + uEnergy * 0.3);
+  if (d > reachMax) { gl_FragColor = vec4(0.0); return; }   // most of the screen: nothing to draw
 
   // Blend the four sides smoothly (no seams on the corner diagonals).
   float W = uRes.x, H = uRes.y, P = 2.0 * (W + H);
@@ -58,8 +60,16 @@ void main() {
   float blend = max(uBloom * 0.6, 12.0);
   vec4 wts = exp(-(dist - d) / blend);
   wts /= (wts.x + wts.y + wts.z + wts.w);
-  vec3 col = edgeColour(us.x) * wts.x + edgeColour(us.y) * wts.y + edgeColour(us.z) * wts.z + edgeColour(us.w) * wts.w;
-  float gain = edgeGain(us.x) * wts.x + edgeGain(us.y) * wts.y + edgeGain(us.z) * wts.z + edgeGain(us.w) * wts.w;
+  vec3 col = vec3(0.0);
+  float gain = 0.0;
+  // Away from the corners only one side has weight; skip the others (big saving per pixel).
+  if (wts.x > 0.01) { col += edgeColour(us.x) * wts.x; gain += edgeGain(us.x) * wts.x; }
+  if (wts.y > 0.01) { col += edgeColour(us.y) * wts.y; gain += edgeGain(us.y) * wts.y; }
+  if (wts.z > 0.01) { col += edgeColour(us.z) * wts.z; gain += edgeGain(us.z) * wts.z; }
+  if (wts.w > 0.01) { col += edgeColour(us.w) * wts.w; gain += edgeGain(us.w) * wts.w; }
+  float wsum = (wts.x > 0.01 ? wts.x : 0.0) + (wts.y > 0.01 ? wts.y : 0.0) + (wts.z > 0.01 ? wts.z : 0.0) + (wts.w > 0.01 ? wts.w : 0.0);
+  col /= max(wsum, 1e-4);
+  gain /= max(wsum, 1e-4);
   float reach = 1.0 + (gain - 1.0) * 0.25 + uEnergy * 0.3;
 
   float core = exp(-d / max(uCore * reach, 0.8));
@@ -123,6 +133,12 @@ export function createGlowRenderer(canvas, { radius = 0, maxScale = 2 } = {}) {
   let phase = 0;
   let lastTime = null;
   let lastBeat = 0;
+  // Smoothed copies of the audio signal: fast attack, gentle release, updated every frame,
+  // so 30 Hz input never looks steppy on a 60-144 Hz display.
+  let sLevel = 0;
+  let sBeat = 0;
+  let sFlow = 0;
+  const approach = (cur, target, dt, up, down) => cur + (target - cur) * (1 - Math.exp(-dt / (target > cur ? up : down)));
   const waves = []; // { start, strength }
 
   function render(settings, { time = performance.now(), level = 0, beat = 0, reducedMotion = false } = {}) {
@@ -132,16 +148,19 @@ export function createGlowRenderer(canvas, { radius = 0, maxScale = 2 } = {}) {
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     gl.viewport(0, 0, w, h);
 
-    const st = frameState(settings, { time, level, beat, reducedMotion });
     const secs = time / 1000;
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, secs - lastTime));
     lastTime = secs;
+    sLevel = approach(sLevel, level, dt, 0.06, 0.28);
+    sBeat = approach(sBeat, beat, dt, 0.025, 0.32);
+    const st = frameState(settings, { time, level: sLevel, beat: sBeat, reducedMotion });
     const moving = !reducedMotion && settings.motion !== 'still';
-    const flow = moving ? (degreesPerSecond(settings.speed) / 360) * (settings.motion === 'music' ? 0.5 + level : 1) : 0;
-    phase = (phase + dt * flow) % 1000;
+    const flow = moving ? (degreesPerSecond(settings.speed) / 360) * (settings.motion === 'music' ? 0.5 + sLevel : 1) : 0;
+    sFlow = approach(sFlow, flow, dt, 0.4, 0.8);   // speed changes glide instead of jumping
+    phase = (phase + dt * sFlow) % 1000;
 
     if (moving && settings.motion === 'music' && beat > 0.9 && lastBeat < 0.6) {
-      waves.push({ start: secs, strength: 0.55 + 0.45 * Math.min(1, level) });
+      waves.push({ start: secs, strength: 0.55 + 0.45 * Math.min(1, sLevel) });
       if (waves.length > 4) waves.shift();
     }
     lastBeat = beat;
@@ -158,10 +177,10 @@ export function createGlowRenderer(canvas, { radius = 0, maxScale = 2 } = {}) {
     gl.uniform1f(u.uIntensity, st.intensity * 1.1);
     gl.uniform1f(u.uPhase, phase);
     gl.uniform1f(u.uTime, reducedMotion ? 0 : secs);
-    gl.uniform1f(u.uShimmer, settings.motion === 'music' && !reducedMotion ? Math.min(1, level * 1.2) : 0.15 * (moving ? 1 : 0));
+    gl.uniform1f(u.uShimmer, settings.motion === 'music' && !reducedMotion ? Math.min(1, sLevel * 1.2) : 0.15 * (moving ? 1 : 0));
     gl.uniform1f(u.uBalance, settings.colorMode === 'solid' ? 0.5 : settings.balance / 100);
     gl.uniform1f(u.uSolid, settings.colorMode === 'solid' ? 1 : 0);
-    gl.uniform1f(u.uEnergy, settings.motion === 'music' && !reducedMotion ? Math.min(1, level) : 0);
+    gl.uniform1f(u.uEnergy, settings.motion === 'music' && !reducedMotion ? Math.min(1, sLevel) : 0);
     gl.uniform3fv(u.uC1, rgb01(settings.primary));
     gl.uniform3fv(u.uC2, rgb01(settings.secondary));
     gl.uniform4fv(u.uWaveAge, ages);
