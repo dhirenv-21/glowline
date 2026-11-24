@@ -339,24 +339,36 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; bo
   mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 70%, transparent 100%);
 }
 .lyrics-track { will-change: transform; padding: 4px 0 40vh; }
+.lyrics { --breath: 0; }
 .lyric-line {
   --dist: 6;
-  margin: 0 0 .5em; font-size: clamp(28px, 3.2vw, 58px); line-height: 1.14; font-weight: 800; letter-spacing: -.025em;
-  color: #fff; opacity: max(.1, calc(.62 - var(--dist) * .09));
-  transform: scale(.965); transform-origin: left center;
-  transition: opacity .55s ease, transform .55s cubic-bezier(.2, .8, .2, 1);
+  position: relative;
+  margin: 0 0 .52em; padding-left: .5em; font-size: clamp(28px, 3.2vw, 58px); line-height: 1.14; font-weight: 800; letter-spacing: -.025em;
+  color: #fff; opacity: max(.1, calc(.5 - var(--dist) * .075));
+  transform: translateY(.06em) scale(.955); transform-origin: left center;
+  transition: opacity .6s ease, transform .7s cubic-bezier(.16, .84, .24, 1), text-shadow .6s ease;
   text-wrap: balance;
 }
-.lyric-line.past { opacity: max(.08, calc(.34 - var(--dist) * .05)); }
-.lyric-line.active { opacity: 1; transform: scale(1); }
-/* Karaoke: words light up as they're sung, glowing in the album colour. */
-.lyric-line .w { color: rgba(255,255,255,.4); transition: color .28s ease, text-shadow .5s ease; }
-.lyric-line .w.sung {
-  color: #fff;
-  text-shadow: 0 0 22px color-mix(in srgb, var(--np-a, #7c6cff) 85%, transparent), 0 0 3px rgba(255,255,255,.45);
+/* Lines already sung recede faster than the ones coming up. */
+.lyric-line.past { opacity: max(.07, calc(.28 - var(--dist) * .05)); transform: translateY(-.04em) scale(.94); }
+/* The current line: pure white, lifted into place, with a soft album-coloured glow that breathes with the music. */
+.lyric-line.active {
+  opacity: 1; transform: none;
+  text-shadow:
+    0 0 calc(18px + var(--breath) * 22px) color-mix(in srgb, var(--np-a, #7c6cff) calc(55% + var(--breath) * 35%), transparent),
+    0 2px 18px rgba(0,0,0,.35);
 }
+/* Accent bar beside the current line, in the album's two colours. */
+.lyric-line::before {
+  content: ""; position: absolute; left: 0; top: .12em; bottom: .12em; width: .09em; border-radius: 1em;
+  background: linear-gradient(to bottom, var(--np-a, #7c6cff), var(--np-b, #3dffa8));
+  box-shadow: 0 0 calc(10px + var(--breath) * 14px) var(--np-a, #7c6cff);
+  opacity: 0; transform: scaleY(.3); transition: opacity .5s ease, transform .6s cubic-bezier(.16, .84, .24, 1);
+}
+.lyric-line.active::before { opacity: 1; transform: none; }
+.lyric-line.gap::before { display: none; }
 /* Instrumental gap: three dots fill over the gap and breathe with the beat. */
-.lyric-line.gap { --gp: 0; --beat: 0; display: flex; gap: .32em; height: .9em; align-items: center; }
+.lyric-line.gap { --gp: 0; --beat: 0; display: flex; gap: .32em; height: .9em; align-items: center; padding-left: .5em; }
 .lyric-line.gap i {
   width: .32em; height: .32em; border-radius: 50%; background: #fff; display: block;
   opacity: .25; transform: scale(calc(.8 + var(--beat) * .25));
@@ -390,6 +402,6 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border: 0; bo
 .stage:fullscreen .transport, .stage:fullscreen .exit-fs, .stage:fullscreen .progress { transition: opacity .5s; }
 .stage:fullscreen.idle .transport, .stage:fullscreen.idle .exit-fs { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .lyric-line, .lyric-line .w { transition: none; }
+  .lyric-line, .lyric-line::before { transition: none; }
   .stage:fullscreen .backdrop img, .stage:fullscreen .backdrop .drift-2 { animation: none; }
 }

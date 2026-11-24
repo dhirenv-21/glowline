@@ -447,7 +447,7 @@ for (const [id, cmd] of [['play', 'play-pause'], ['prev', 'previous'], ['next', 
 const lyricsBox = $('#lyrics');
 const lyricsTrack = $('#lyrics-track');
 const lyricsNote = $('#lyrics-note');
-const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1, y: 0, target: 0, words: null, sung: -1 };
+const lyr = { key: null, status: 'idle', lines: [], els: [], active: -2, plainOffset: -1, y: 0, target: 0, breath: -1 };
 
 function lyricsKey() { return media.session && media.title ? `${media.artist}|${media.title}` : null; }
 
@@ -458,8 +458,6 @@ function showLyrics(res) {
   lyr.plainOffset = -1;
   lyr.y = 0;
   lyr.target = 0;
-  lyr.words = null;
-  lyr.sung = -1;
   lyricsTrack.style.transform = 'translate3d(0,0,0)';
   lyricsTrack.replaceChildren();
   if (res.status === 'synced') {
@@ -511,26 +509,6 @@ async function loadLyrics({ force = false } = {}) {
   showLyrics(res ?? { status: 'error' });
 }
 
-/** Split the active line into word spans with estimated timing (by word length). */
-function activateWords(el, start, end) {
-  const words = el.textContent.split(/(\s+)/);
-  el.textContent = '';
-  const spans = [];
-  let total = 0;
-  for (const w of words) {
-    if (/^\s+$/.test(w)) { el.append(w); continue; }
-    const span = document.createElement('span');
-    span.className = 'w';
-    span.textContent = w;
-    el.append(span);
-    spans.push({ span, before: total });
-    total += w.length + 2;   // longer words take longer to sing
-  }
-  // Words are sung over ~85% of the line; the rest is breath before the next line.
-  const dur = Math.max(0.6, Math.min(end - start, 12)) * 0.85;
-  return spans.map(({ span, before }) => ({ span, t: start + (before / Math.max(total, 1)) * dur }));
-}
-
 let lastLyricsTime = performance.now();
 function renderLyrics(now) {
   const dt = Math.min(0.1, (now - lastLyricsTime) / 1000);
@@ -542,8 +520,6 @@ function renderLyrics(now) {
   if (lyr.status === 'synced') {
     const idx = activeLineIndex(lyr.lines, pos);
     if (idx !== lyr.active) {
-      const prev = lyr.els[lyr.active];
-      if (prev && !prev.classList.contains('gap')) prev.textContent = lyr.lines[lyr.active].text; // drop word spans
       lyr.active = idx;
       const lo = Math.max(0, idx - 8), hi = Math.min(lyr.els.length - 1, idx + 8);
       lyr.els.forEach((el, i) => {
@@ -553,25 +529,12 @@ function renderLyrics(now) {
         el.style.setProperty('--dist', String(Math.min(6, Math.abs(i - idx))));
       });
       const cur = lyr.els[idx];
-      lyr.words = null;
-      lyr.sung = -1;
-      if (cur && !cur.classList.contains('gap')) {
-        const end = lyr.lines[idx + 1]?.t ?? lyr.lines[idx].t + 5;
-        lyr.words = activateWords(cur, lyr.lines[idx].t, end);
-      }
       const anchor = cur ?? lyr.els[0];
       lyr.target = idx < 0 ? 0 : Math.max(0, anchor.offsetTop + anchor.offsetHeight / 2 - view * 0.36);
     }
-    // Karaoke: light words as they're sung.
-    if (lyr.words) {
-      let n = 0;
-      while (n < lyr.words.length && pos >= lyr.words[n].t) n++;
-      if (n !== lyr.sung) {
-        for (let i = Math.max(0, lyr.sung); i < lyr.words.length; i++) lyr.words[i].span.classList.toggle('sung', i < n);
-        if (n < lyr.sung) lyr.words.forEach((w, i) => w.span.classList.toggle('sung', i < n));
-        lyr.sung = n;
-      }
-    }
+    // The current line's glow breathes with the music (quantised so it repaints rarely).
+    const breath = reducedMotion ? 0 : Math.round(Math.min(1, signal.level * 0.7 + signal.beat * 0.5) * 10) / 10;
+    if (breath !== lyr.breath) { lyr.breath = breath; lyricsBox.style.setProperty('--breath', String(breath)); }
     // Instrumental gap: three dots fill in over the gap and breathe with the beat.
     const cur = lyr.els[lyr.active];
     if (cur && cur.classList.contains('gap')) {
