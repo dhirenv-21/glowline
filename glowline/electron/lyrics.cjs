@@ -89,9 +89,11 @@ function pickBest(hits, duration) {
 }
 
 /**
- * Look up lyrics. Returns { status: 'synced'|'plain'|'instrumental'|'none'|'error', lines?, text?, message? }.
+ * Look up lyrics. Returns { status: 'synced'|'plain'|'instrumental'|'none'|'error'|'needs-consent', lines?, text?, message? }.
+ * With `allowNetwork: false` only the local cache is consulted; if the song isn't cached the
+ * result is { status: 'needs-consent' } and nothing is sent anywhere.
  */
-async function getLyrics(track, { cacheDir, fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+async function getLyrics(track, { cacheDir, fetchImpl = globalThis.fetch, timeoutMs = 8000, allowNetwork = true } = {}) {
   const title = String(track?.title ?? '').trim();
   const artist = String(track?.artist ?? '').trim();
   if (!title) return { status: 'none' };
@@ -102,6 +104,7 @@ async function getLyrics(track, { cacheDir, fetchImpl = globalThis.fetch, timeou
       if (cached.status !== 'none' || Date.now() - cached.savedAt < NOT_FOUND_TTL_MS) return { ...cached, cached: true };
     } catch { /* no cache yet */ }
   }
+  if (!allowNetwork) return { status: 'needs-consent' };
   const duration = Math.round(Number(track?.duration) || 0);
   try {
     let rec = null;

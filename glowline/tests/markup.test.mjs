@@ -48,6 +48,9 @@ test('the microphone is never requested', async () => {
   assert.doesNotMatch(app, /getUserMedia/);
   assert.doesNotMatch(html, /microphone"|mic-start/i);
   const main = await readFile(new URL('../electron/main.cjs', import.meta.url), 'utf8');
-  assert.ok(main.includes("if (permission === 'display-capture') return callback(pendingCapture !== null);"));
+  // Only the control window may ask for anything; display capture needs a fresh, one-shot permit;
+  // every other permission (including 'media' = microphone/camera) is refused.
+  assert.ok(main.includes('if (!isControlContents(wc)) return callback(false);'));
+  assert.ok(main.includes("if (permission === 'display-capture') return callback(!!pendingCapture && pendingCapture.expires > Date.now());"));
   assert.ok(main.includes("callback(permission === 'fullscreen');"));
 });

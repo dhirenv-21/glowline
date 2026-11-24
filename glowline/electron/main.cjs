@@ -1,9 +1,11 @@
 // Glowline desktop shell (Electron main process).
 'use strict';
 
-const { app, BrowserWindow, ipcMain, screen, session, desktopCapturer, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session, desktopCapturer, globalShortcut, shell, powerMonitor } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { pathToFileURL } = require('node:url');
+const guard = require('./ipc-guard.cjs');
 const { watchSpotify } = require('./spotify.cjs');
 const { startMediaWatcher } = require('./media.cjs');
 const { getLyrics } = require('./lyrics.cjs');
@@ -19,7 +21,10 @@ const DEMO = process.argv.includes('--demo') || !!SHOTS_DIR;
 let control = null;
 /** @type {Map<number, BrowserWindow>} */
 const overlays = new Map();
+/** One-shot capture permit set by a Glowline control: { kind, displayId, expires }. */
 let pendingCapture = null;
+/** Settings sanitizer from src/core.js (ES module, loaded at startup). */
+let sanitizeSettings = null;
 let spotifyStatus = { state: 'unknown', title: null };
 let stopSpotify = null;
 let media = null;
@@ -70,6 +75,49 @@ function createControlWindow() {
   });
 }
 
+// ---------- Who is allowed to talk to the main process ----------
+function isControlContents(wc) {
+  return !!control && !control.isDestroyed() && wc === control.webContents;
+}
+
+/** True only for the control window's top-level frame showing Glowline's own index.html. */
+function isTrustedSender(event) {
+  const frame = event?.senderFrame;
+  if (!frame || frame.parent) return false;            // main frame only, never an iframe
+  if (!isControlContents(event.sender)) return false;  // overlays and anything else: no IPC
+  return guard.isAppPageUrl(frame.url, ROOT, ['index.html']);
+}
+
+let lastRejectLog = 0;
+function logRejected(channel, why) {
+  const now = Date.now();
+  if (now - lastRejectLog < 2000) return; // don't let a misbehaving page flood the log
+  lastRejectLog = now;
+  console.warn(`[glowline] rejected ${channel}: ${why}`);
+}
+
+/** ipcMain.handle with a sender check. Untrusted callers get an error, nothing runs. */
+function handle(channel, fn) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedSender(event)) { logRejected(channel, 'untrusted sender'); throw new Error('Request rejected.'); }
+    return fn(event, ...args);
+  });
+}
+
+/** ipcMain.on with a sender check. Untrusted messages are dropped. */
+function listen(channel, fn) {
+  ipcMain.on(channel, (event, ...args) => {
+    if (!isTrustedSender(event)) { logRejected(channel, 'untrusted sender'); return; }
+    fn(event, ...args);
+  });
+}
+
+function takeCapturePermit() {
+  const permit = pendingCapture;
+  pendingCapture = null;
+  return permit && permit.expires > Date.now() ? permit : null;
+}
+
 // ---------- Edge-glow overlay windows ----------
 function createOverlay(display) {
   const win = new BrowserWindow({
@@ -104,11 +152,12 @@ function createOverlay(display) {
   return win;
 }
 
-function setOverlay({ enabled, displayIds }) {
+function setOverlay(request) {
+  const { enabled, displayIds } = guard.validateOverlaySet(request);
   const displays = screen.getAllDisplays();
   const wanted = new Set(
     enabled
-      ? (displayIds?.length ? displayIds.map(Number) : [screen.getPrimaryDisplay().id]).filter((id) => displays.some((d) => d.id === id))
+      ? (displayIds.length ? displayIds : [screen.getPrimaryDisplay().id]).filter((id) => displays.some((d) => d.id === id))
       : [],
   );
   for (const [id, win] of overlays) {
@@ -149,19 +198,24 @@ function installCaptureHandlers() {
   // Glowline never asks for the microphone or camera ('media' is always denied). The only
   // capture it allows is 'display-capture', and only right after a Glowline control declared
   // what it is for (system-audio loopback or screen colour sampling).
-  ses.setPermissionRequestHandler((_wc, permission, callback) => {
-    if (permission === 'display-capture') return callback(pendingCapture !== null);
+  ses.setPermissionRequestHandler((wc, permission, callback) => {
+    if (!isControlContents(wc)) return callback(false);
+    if (permission === 'display-capture') return callback(!!pendingCapture && pendingCapture.expires > Date.now());
     callback(permission === 'fullscreen');
   });
-  ses.setPermissionCheckHandler((_wc, permission) => permission === 'fullscreen');
+  ses.setPermissionCheckHandler((wc, permission) => permission === 'fullscreen' && isControlContents(wc));
 
   // getDisplayMedia() in the renderer lands here. The renderer first declares (via IPC) whether
   // it wants system-audio loopback or a screen for colour sampling, triggered by a button press.
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
-    const want = pendingCapture;
-    pendingCapture = null;
+    const want = takeCapturePermit();
     try {
-      if (!want) throw new Error('No capture was requested by a Glowline control.');
+      const frame = request.frame;
+      const main = control && !control.isDestroyed() ? control.webContents.mainFrame : null;
+      const fromControl = !!frame && !!main && frame.processId === main.processId && frame.routingId === main.routingId
+        && guard.isAppPageUrl(frame.url, ROOT, ['index.html']);
+      if (!fromControl) throw new Error('Capture requested by an unexpected page.');
+      if (!want) throw new Error('No capture was requested by a Glowline control (or the request expired).');
       if (want.kind === 'system-audio') {
         if (process.platform !== 'win32') throw new Error('System audio loopback is only supported on Windows in this build.');
         // getDisplayMedia needs a video track. Use Glowline's own page (an in-process capture)
@@ -184,7 +238,7 @@ function installCaptureHandlers() {
 
 // ---------- IPC ----------
 function installIpc() {
-  ipcMain.handle('app:info', () => ({
+  handle('app:info', () => ({
     platform: process.platform,
     electron: process.versions.electron,
     systemAudioLoopback: process.platform === 'win32',
@@ -192,30 +246,50 @@ function installIpc() {
     shortcut: OVERLAY_SHORTCUT.replace('Control', 'Ctrl'),
     demo: DEMO,
   }));
-  ipcMain.handle('displays:list', () => describeDisplays());
-  ipcMain.handle('capture:prepare', (_e, { kind, displayId }) => {
-    if (!['system-audio', 'screen'].includes(kind)) return false;
-    pendingCapture = { kind, displayId };
-    setTimeout(() => { if (pendingCapture?.kind === kind) pendingCapture = null; }, 15000);
+  handle('displays:list', () => describeDisplays());
+  handle('capture:prepare', (_e, payload) => {
+    const req = guard.validateCapturePrepare(payload);
+    if (!req) { logRejected('capture:prepare', 'invalid payload'); return false; }
+    pendingCapture = { ...req, expires: Date.now() + 15000 }; // one capture, within 15 s
     return true;
   });
-  ipcMain.handle('overlay:set', (_e, opts) => setOverlay(opts ?? {}));
-  ipcMain.on('overlay:frame', (_e, frame) => {
+  handle('overlay:set', (_e, payload) => setOverlay(payload));
+  listen('overlay:frame', (_e, payload) => {
+    if (overlays.size === 0 || !sanitizeSettings) return;
+    const frame = guard.sanitizeFrame(payload, sanitizeSettings);
+    if (!frame) return;
     for (const win of overlays.values()) {
       if (!win.isDestroyed()) win.webContents.send('overlay:frame', frame);
     }
   });
-  ipcMain.handle('spotify:get', () => spotifyStatus);
-  ipcMain.handle('media:get', () => ({ ...lastMedia, art: lastArt }));
-  ipcMain.handle('media:command', (_e, name) => media?.command(name) ?? false);
-  ipcMain.handle('lyrics:get', (_e, track) => getLyrics(
-    { title: track?.title, artist: track?.artist, album: track?.album, duration: track?.duration },
-    { cacheDir: path.join(app.getPath('userData'), 'lyrics-cache') },
-  ));
-  ipcMain.on('window:theme', (_e, dark) => {
-    try { control?.setTitleBarOverlay({ color: '#00000000', symbolColor: dark ? '#f4f4f6' : '#111114', height: 44 }); } catch { /* not supported */ }
+  handle('spotify:get', () => spotifyStatus);
+  handle('media:get', () => ({ ...lastMedia, art: lastArt }));
+  handle('media:command', (_e, name) => {
+    const cmd = guard.validateMediaCommand(name);
+    if (!cmd) { logRejected('media:command', 'unknown command'); return false; }
+    return media?.command(cmd) ?? false;
+  });
+  handle('lyrics:get', (_e, payload) => {
+    const req = guard.validateLyricsRequest(payload);
+    if (!req) return { status: 'none' };
+    const { allowNetwork, ...track } = req;
+    return getLyrics(track, { cacheDir: path.join(app.getPath('userData'), 'lyrics-cache'), allowNetwork });
+  });
+  listen('window:theme', (_e, dark) => {
+    try { control?.setTitleBarOverlay({ color: '#00000000', symbolColor: dark === true ? '#f4f4f6' : '#111114', height: 44 }); } catch { /* not supported */ }
   });
 }
+
+// Every web page Glowline creates (control and overlays) may not open windows, navigate away
+// or embed <webview>s.
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-attach-webview', (ev) => ev.preventDefault());
+  wc.on('will-navigate', (ev) => ev.preventDefault());
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+});
 
 // ---------- Self-test (used for automated verification; see README) ----------
 async function runSelfTest() {
@@ -292,7 +366,8 @@ async function captureScreenshots() {
   app.exit(0);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  ({ sanitizeSettings } = await import(pathToFileURL(path.join(ROOT, 'src', 'core.js')).href));
   installCaptureHandlers();
   installIpc();
   createControlWindow();
@@ -314,6 +389,18 @@ app.whenReady().then(() => {
     }
     control?.webContents.send('media:update', msg);
   });
+
+  // Sleep, lock and resume can end Windows' loopback capture; tell the window so it can explain
+  // what happened and (if auto-start is on) start listening again.
+  for (const evt of ['suspend', 'resume', 'lock-screen', 'unlock-screen']) {
+    powerMonitor.on(evt, () => control?.webContents.send('power', evt));
+  }
+  powerMonitor.on('resume', () => setTimeout(() => {
+    control?.webContents.executeJavaScript('window.__glowlineAutoStart?.("resume")', true).catch(() => {});
+  }, 2500));
+  powerMonitor.on('unlock-screen', () => setTimeout(() => {
+    control?.webContents.executeJavaScript('window.__glowlineAutoStart?.("unlock")', true).catch(() => {});
+  }, 1500));
 
   if (!globalShortcut.register(OVERLAY_SHORTCUT, () => control?.webContents.send('shortcut', 'toggle-overlay'))) {
     console.warn(`[glowline] ${OVERLAY_SHORTCUT} is in use by another app; use the on-screen toggle instead.`);

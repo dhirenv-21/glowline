@@ -93,3 +93,22 @@ test('getLyrics: falls back to search, handles instrumental, none and network er
   assert.deepEqual(err, { status: 'error', message: 'offline' });
   assert.deepEqual(await getLyrics({ title: '' }), { status: 'none' });
 });
+
+test('getLyrics with allowNetwork:false never calls the network', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'glowline-lyrics-'));
+  try {
+    const calls = [];
+    const fetchImpl = fakeFetch([['/api/get?', { syncedLyrics: '[00:01.00]Hello' }]], calls);
+    const track = { title: 'Song', artist: 'Artist', duration: 120 };
+    // Not cached yet: cache-only lookup asks for consent and sends nothing.
+    assert.deepEqual(await getLyrics(track, { cacheDir: dir, fetchImpl, allowNetwork: false }), { status: 'needs-consent' });
+    assert.equal(calls.length, 0);
+    // After an approved lookup, the cached answer is available without the network.
+    await getLyrics(track, { cacheDir: dir, fetchImpl, allowNetwork: true });
+    assert.equal(calls.length, 1);
+    const cached = await getLyrics(track, { cacheDir: dir, fetchImpl, allowNetwork: false });
+    assert.equal(cached.status, 'synced');
+    assert.equal(cached.cached, true);
+    assert.equal(calls.length, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
